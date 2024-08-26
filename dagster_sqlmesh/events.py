@@ -78,13 +78,13 @@ class StatefulConsoleEventHandler:
                 logger.debug(batches)
                 logger.debug(environment_naming_info)
                 logger.debug(default_catalog)
-
             case console.UpdatePromotionProgress(snapshot, promoted):
                 logger.debug("UPDATE PROMOTION PROGRESS")
                 logger.debug(snapshot)
                 logger.debug(promoted)
             case console.StopPromotionProgress(success):
                 logger.debug("STOP PROMOTION")
+                logger.debug(success)
             case console.StartSnapshotEvaluationProgress(snapshot):
                 logger.debug("START SNAPSHOT EVALUATION")
                 logger.debug(snapshot.name)
@@ -93,6 +93,8 @@ class StatefulConsoleEventHandler:
             ):
                 logger.debug("UPDATE SNAPSHOT EVALUATION")
                 logger.debug(snapshot.name)
+                logger.debug(batch_idx)
+                logger.debug(duration_ms)
             case _:
                 if self._enable_unknown_event_logging:
                     logger.debug("Unhandled event")
