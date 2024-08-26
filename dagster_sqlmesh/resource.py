@@ -1,4 +1,4 @@
-from dagster import ConfigurableResource, AssetExecutionContext, AssetMaterialization
+from dagster import ConfigurableResource, AssetExecutionContext
 
 from .config import SQLMeshContextConfig
 

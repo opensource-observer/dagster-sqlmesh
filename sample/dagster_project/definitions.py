@@ -1,11 +1,10 @@
 import os
 
 from dagster import (
-    load_assets_from_modules,
     Definitions,
 )
 
-from dagster_sqlmesh import sqlmesh_asset, SQLMeshResource, SQLMeshContextConfig
+from dagster_sqlmesh import sqlmesh_asset, SQLMeshContextConfig
 
 CURR_DIR = os.path.dirname(__file__)
 SQLMESH_PROJECT_PATH = os.path.abspath(os.path.join(CURR_DIR, "../sqlmesh_project"))

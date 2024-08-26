@@ -1,9 +1,7 @@
-from typing import Any, List, Optional, Set, Callable
+from typing import List, Optional, Set, Callable
 import logging
 
 from sqlmesh.core.model import Model
-from sqlmesh.core.context_diff import ContextDiff
-from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.snapshot import SnapshotInfoLike, SnapshotId
 from sqlmesh.core.plan import Plan
 

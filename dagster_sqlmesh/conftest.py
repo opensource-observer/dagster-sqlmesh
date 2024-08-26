@@ -4,7 +4,7 @@ import tempfile
 import shutil
 import os
 from dataclasses import dataclass
-from typing import cast, List, Tuple, Optional, Any, Dict
+from typing import cast, List, Optional, Any, Dict
 
 import pytest
 import duckdb

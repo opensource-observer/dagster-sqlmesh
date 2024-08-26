@@ -1,24 +1,19 @@
-from ast import Call
-from typing import Optional, Dict, Set, Any, Union, Callable, List
+from typing import Optional, Dict, Set, Union, Callable, List
 from dataclasses import dataclass
 import uuid
 import unittest
 
-from sqlmesh import SQL
 from sqlmesh.core.console import Console
 from sqlmesh.core.plan import Plan
 from sqlmesh.core.context_diff import ContextDiff
-from sqlmesh.core.plan import Plan, PlanBuilder
+from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.core.table_diff import RowDiff, SchemaDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.snapshot import (
     Snapshot,
-    SnapshotChangeCategory,
     SnapshotId,
     SnapshotInfoLike,
-    start_date,
 )
-from sqlmesh.core.test import ModelTest
 
 
 @dataclass

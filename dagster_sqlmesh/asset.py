@@ -1,30 +1,20 @@
 from dataclasses import dataclass, field
 from typing import (
-    List,
-    Callable,
     Union,
     Iterable,
     Dict,
     Mapping,
     Set,
-    cast,
     Any,
     Optional,
 )
 import logging
 
-from click import Option
-import sqlglot as sql
-from sqlglot import expressions as exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.console import Console
-from sqlmesh.core.config import Config
 from sqlmesh.core.model import Model
-from sqlmesh.core.plan import PlanBuilder
-from sqlmesh.utils.dag import DAG
 from dagster import (
     AssetDep,
-    op,
     multi_asset,
     AssetCheckResult,
     AssetMaterialization,

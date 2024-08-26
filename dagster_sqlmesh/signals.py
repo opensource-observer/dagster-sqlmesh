@@ -1,8 +1,7 @@
 import logging
 from sqlmesh.core.scheduler import Signal
 
-from datetime import date
-from sqlmesh.core.scheduler import Batch, Signal
+from sqlmesh.core.scheduler import Batch
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
