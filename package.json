@@ -1,0 +1,30 @@
+{
+  "name": "dagster-sqlmesh",
+  "description": "SQLMesh adapter for dagster - node deps are only for development",
+  "version": "0.0.0",
+  "author": "Kariba Labs",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opensource-observer/oso.git"
+  },
+  "scripts": {
+    "build": "turbo run build --concurrency=100%",
+    "format:staged": "lint-staged",
+    "pyright": "pyright --pythonpath $(poetry env info --path)/bin/python",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.3.2",
+    "pyright": "^1.1.377",
+    "turbo": "^1.13.4"
+  },
+  "engines": {
+    "node": ">=18.x",
+    "pnpm": ">=8"
+  }
+}

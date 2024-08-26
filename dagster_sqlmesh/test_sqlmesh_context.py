@@ -74,6 +74,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     sample_sqlmesh_test_context.sqlmesh_plan(
         environment="dev",
         apply=True,
+        end="2024-07-10",
         execution_time="2024-07-10",
         # restate_models=["sqlmesh_example.staging_model_3"],
     )
@@ -96,6 +97,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     sample_sqlmesh_test_context.sqlmesh_plan(
         environment="dev",
         apply=True,
+        end="2024-07-10",
         execution_time="2024-07-10",
     )
 

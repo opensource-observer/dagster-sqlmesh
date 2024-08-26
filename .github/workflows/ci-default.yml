@@ -1,0 +1,127 @@
+# NOTE: This name appears in GitHub's Checks API and in workflow's status badge.
+name: ci-default
+env:
+  # CI variables
+  DOCKER_PLATFORM: "amd64"
+
+# Trigger the workflow when:
+on:
+  # A push occurs to one of the matched branches.
+  push:
+    branches:
+      - main
+  # Or when a pull request event occurs for a pull request against one of the
+  # matched branches.
+  pull_request:
+    branches:
+      - main
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  merge_group:
+
+# Cancel in progress jobs on new pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    # NOTE: This name appears in GitHub's Checks API.
+    name: test
+    environment: testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python_version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Check out pull request's HEAD commit instead of the merge commit to
+          # prevent gitlint from failing due to too long commit message titles,
+          # e.g. "Merge 3e621938d65caaa67f8e35d145335d889d470fc8 into 19a39b2f66cd7a165082d1486b2f1eb36ec2354a".
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Fetch all history so gitlint can check the relevant commits.
+          fetch-depth: "0"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: |
+            - recursive: true
+              args: [--frozen-lockfile, --strict-peer-dependencies]
+
+      - name: "Setup Python, Poetry and Dependencies"
+        uses: packetcoders/action-setup-cache-python-poetry@main
+        with:
+          python-version: 3.12
+          poetry-version: 1.8.2
+
+      - name: Authenticate to google with a test-dummy user
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ env.GOOGLE_TEST_DUMMY_CREDENTIALS_JSON }}"
+          create_credentials_file: true
+
+      - name: Setup dbt profile
+        run: |
+          bash .github/scripts/create-dbt-profile.sh ${GOOGLE_APPLICATION_CREDENTIALS}
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly-87bc53fc6c874bd4c92d97ed180b949e3a36d78c
+        if: ${{ matrix.component == 'node' }}
+
+      - name: Run supabase local
+        id: supabase
+        run: |
+          bash .github/scripts/run-supabase-local.sh apps/frontend
+        if: ${{ matrix.component == 'node' }}
+
+      # Automatically retry if the build fails
+      - name: Build (Node)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: |
+            pnpm build
+        # Always run this step so that all linting errors can be seen at once.
+        if: ${{ matrix.component == 'node' }}
+
+      - name: Lint (Node)
+        run: |
+          pnpm lint
+        # Always run this step so that all linting errors can be seen at once.
+        if: ${{ always() && steps.supabase.conclusion == 'success' && matrix.component == 'node' }}
+
+      - name: Test (Node)
+        run: |
+          pnpm test
+        # Always run this step so that all linting errors can be seen at once.
+        if: ${{ always() && steps.supabase.conclusion == 'success' &&  matrix.component == 'node' }}
+
+      # Temporarily include this separately. Eventually this should all be part of lint
+      - name: Lint SQL (dbt)
+        run: |
+          poetry run sqlfluff lint --dialect bigquery ./warehouse/dbt/models
+        if: ${{ always() && matrix.component == 'dbt' }}
+
+      - name: Type Check (Python)
+        run: |
+          pnpm pyright
+        if: ${{ always() && matrix.component == 'python' }}
+
+      - name: Lint (Python)
+        run: |
+          poetry run ruff check
+        if: ${{ always() && matrix.component == 'python' }}
+
+      - name: Test (Python)
+        run: |
+          poetry run pytest
+        if: ${{ always() && matrix.component == 'python' }}
+      
+     

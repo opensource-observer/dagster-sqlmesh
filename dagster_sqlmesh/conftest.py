@@ -106,8 +106,8 @@ class SQLMeshTestContext:
         end: Optional[TimeLike] = None,
         restate_models: Optional[List[str]] = None,
     ):
-        mesh = self.create_controller(enable_debug_console=enable_debug_console)
-        mesh.add_event_handler(StatefulConsoleEventHandler())
+        controller = self.create_controller(enable_debug_console=enable_debug_console)
+        controller.add_event_handler(StatefulConsoleEventHandler())
         plan_options: Dict[str, Any] = dict(
             environment=environment,
             enable_preview=True,
@@ -120,26 +120,26 @@ class SQLMeshTestContext:
             run_options["execution_time"] = execution_time
         if restate_models:
             plan_options["restate_models"] = restate_models
-        if start and end:
+        if start:
             plan_options["start"] = start
-            plan_options["end"] = end
-
             run_options["start"] = start
+        if end:
+            plan_options["end"] = end
             run_options["end"] = end
 
         builder = cast(
             PlanBuilder,
-            mesh.context.plan_builder(**plan_options),
+            controller.context.plan_builder(**plan_options),
         )
         if apply:
             logger.debug("making plan")
             plan = builder.build()
             show_plan_summary(plan, lambda x: x.is_model)
             logger.debug("applying plan")
-            mesh.context.apply(plan)
+            controller.context.apply(plan)
             logger.debug("running through the scheduler")
-            mesh.context.run(**run_options)
-        mesh.context.close()
+            controller.context.run(**run_options)
+        controller.context.close()
 
 
 @pytest.fixture
