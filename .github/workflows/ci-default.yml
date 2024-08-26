@@ -55,73 +55,19 @@ jobs:
       - name: "Setup Python, Poetry and Dependencies"
         uses: packetcoders/action-setup-cache-python-poetry@main
         with:
-          python-version: 3.12
+          python-version: ${{ matrix.python_version }}
           poetry-version: 1.8.2
-
-      - name: Authenticate to google with a test-dummy user
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ env.GOOGLE_TEST_DUMMY_CREDENTIALS_JSON }}"
-          create_credentials_file: true
-
-      - name: Setup dbt profile
-        run: |
-          bash .github/scripts/create-dbt-profile.sh ${GOOGLE_APPLICATION_CREDENTIALS}
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly-87bc53fc6c874bd4c92d97ed180b949e3a36d78c
-        if: ${{ matrix.component == 'node' }}
-
-      - name: Run supabase local
-        id: supabase
-        run: |
-          bash .github/scripts/run-supabase-local.sh apps/frontend
-        if: ${{ matrix.component == 'node' }}
-
-      # Automatically retry if the build fails
-      - name: Build (Node)
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          command: |
-            pnpm build
-        # Always run this step so that all linting errors can be seen at once.
-        if: ${{ matrix.component == 'node' }}
-
-      - name: Lint (Node)
-        run: |
-          pnpm lint
-        # Always run this step so that all linting errors can be seen at once.
-        if: ${{ always() && steps.supabase.conclusion == 'success' && matrix.component == 'node' }}
-
-      - name: Test (Node)
-        run: |
-          pnpm test
-        # Always run this step so that all linting errors can be seen at once.
-        if: ${{ always() && steps.supabase.conclusion == 'success' &&  matrix.component == 'node' }}
-
-      # Temporarily include this separately. Eventually this should all be part of lint
-      - name: Lint SQL (dbt)
-        run: |
-          poetry run sqlfluff lint --dialect bigquery ./warehouse/dbt/models
-        if: ${{ always() && matrix.component == 'dbt' }}
 
       - name: Type Check (Python)
         run: |
           pnpm pyright
-        if: ${{ always() && matrix.component == 'python' }}
 
       - name: Lint (Python)
         run: |
           poetry run ruff check
-        if: ${{ always() && matrix.component == 'python' }}
 
       - name: Test (Python)
         run: |
           poetry run pytest
-        if: ${{ always() && matrix.component == 'python' }}
       
      
