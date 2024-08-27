@@ -20,7 +20,7 @@ from sqlmesh.core.config import (
 )
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
-from dagster_sqlmesh.events import StatefulConsoleEventHandler, show_plan_summary
+from dagster_sqlmesh.events import ConsoleRecorder, show_plan_summary
 from dagster_sqlmesh.asset import setup_sqlmesh_controller
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,6 @@ def sample_sqlmesh_project():
             os.remove(os.path.join(project_dir, "db.db"))
 
         # Initialize the "source" data
-
         yield str(project_dir)
 
 
@@ -95,7 +94,7 @@ class SQLMeshTestContext:
         """
         )
 
-    def sqlmesh_plan(
+    def run(
         self,
         *,
         environment: str,
@@ -107,7 +106,7 @@ class SQLMeshTestContext:
         restate_models: Optional[List[str]] = None,
     ):
         controller = self.create_controller(enable_debug_console=enable_debug_console)
-        controller.add_event_handler(StatefulConsoleEventHandler())
+        controller.add_event_handler(ConsoleRecorder())
         plan_options: Dict[str, Any] = dict(
             environment=environment,
             enable_preview=True,
@@ -134,7 +133,7 @@ class SQLMeshTestContext:
         if apply:
             logger.debug("making plan")
             plan = builder.build()
-            show_plan_summary(plan, lambda x: x.is_model)
+            show_plan_summary(logger, plan, lambda x: x.is_model)
             logger.debug("applying plan")
             controller.context.apply(plan)
             logger.debug("running through the scheduler")
@@ -152,8 +151,9 @@ def sample_sqlmesh_test_context(sample_sqlmesh_project: str):
         default_gateway="local",
         model_defaults=ModelDefaultsConfig(dialect="duckdb"),
     )
+    config_as_dict = config.dict()
     context_config = SQLMeshContextConfig(
-        path=sample_sqlmesh_project, gateway="local", sqlmesh_config=config
+        path=sample_sqlmesh_project, gateway="local", config_override=config_as_dict
     )
     test_context = SQLMeshTestContext(db_path=db_path, context_config=context_config)
     test_context.initialize_test_source()

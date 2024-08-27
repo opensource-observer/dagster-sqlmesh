@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Set, Union, Callable, List
+from typing import Optional, Dict, Set, Union, Callable
 from dataclasses import dataclass
 import uuid
 import unittest
@@ -262,7 +262,7 @@ ConsoleEventHandler = Callable[[ConsoleEvent], None]
 
 class EventConsole(Console):
     def __init__(self):
-        self._handlers: List[ConsoleEventHandler] = []
+        self._handlers: Dict[str, ConsoleEventHandler] = {}
 
     def start_plan_evaluation(self, plan: Plan) -> None:
         self.publish(StartPlanEvaluation(plan))
@@ -426,11 +426,16 @@ class EventConsole(Console):
         self.publish(ShowRowDiff(row_diff, show_sample, skip_grain_check))
 
     def publish(self, event: ConsoleEvent) -> None:
-        for handler in self._handlers:
+        for handler in self._handlers.values():
             handler(event)
 
-    def listen(self, handler: ConsoleEventHandler):
-        self._handlers.append(handler)
+    def add_handler(self, handler: ConsoleEventHandler):
+        handler_id = str(uuid.uuid4())
+        self._handlers[handler_id] = handler
+        return handler_id
+
+    def remove_handler(self, handler_id: str):
+        del self._handlers[handler_id]
 
 
 class DebugEventConsole(EventConsole):

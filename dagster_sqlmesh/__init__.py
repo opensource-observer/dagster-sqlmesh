@@ -2,3 +2,4 @@
 
 from .asset import *
 from .config import *
+from .resource import *

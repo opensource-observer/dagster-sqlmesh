@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
-    sample_sqlmesh_test_context.sqlmesh_plan(
+    sample_sqlmesh_test_context.run(
         environment="dev",
         apply=True,
     )
@@ -22,7 +22,7 @@ def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
 
 def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     logger.debug("SQLMESH MATERIALIZATION 1")
-    sample_sqlmesh_test_context.sqlmesh_plan(
+    sample_sqlmesh_test_context.run(
         environment="dev",
         start="2023-01-01",
         end="2024-01-01",
@@ -38,7 +38,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     assert staging_model_count[0][0] == 5
 
     logger.debug("SQLMESH MATERIALIZATION 2")
-    sample_sqlmesh_test_context.sqlmesh_plan(
+    sample_sqlmesh_test_context.run(
         environment="dev",
         start="2024-01-01",
         end="2024-07-07",
@@ -69,7 +69,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
         )
     )
     logger.debug("SQLMESH MATERIALIZATION 3")
-    sample_sqlmesh_test_context.sqlmesh_plan(
+    sample_sqlmesh_test_context.run(
         environment="dev",
         apply=True,
         end="2024-07-10",
@@ -92,7 +92,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     assert test_source_model_count[0][0] == 5
 
     logger.debug("SQLMESH MATERIALIZATION 4 - should be no changes")
-    sample_sqlmesh_test_context.sqlmesh_plan(
+    sample_sqlmesh_test_context.run(
         environment="dev",
         apply=True,
         end="2024-07-10",
@@ -108,7 +108,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
             }
         )
     )
-    sample_sqlmesh_test_context.sqlmesh_plan(
+    sample_sqlmesh_test_context.run(
         environment="dev",
         apply=True,
         # restate_models=["sqlmesh_example.staging_model_3"],

@@ -15,6 +15,7 @@ pytest = "^8.3.2"
 boltons = "^24.0.0"
 pyarrow = "^17.0.0"
 polars = "^1.5.0"
+dagster-duckdb-polars = "^0.24.2"
 
 
 [tool.poetry.group.dev.dependencies]

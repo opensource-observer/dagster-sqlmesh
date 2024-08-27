@@ -34,11 +34,6 @@ logger = logging.getLogger(__name__)
 MultiAssetResponse = Iterable[Union[AssetCheckResult, AssetMaterialization]]
 
 
-# Define a SQLMesh Resource
-class SQLMeshResource:
-    pass
-
-
 @dataclass(kw_only=True)
 class SQLMeshParsedFQN:
     catalog: str
@@ -164,7 +159,10 @@ class SQLMeshController:
     context: Context
 
     def add_event_handler(self, handler: ConsoleEventHandler):
-        self.console.listen(handler)
+        return self.console.add_handler(handler)
+
+    def remove_event_handler(self, handler_id: str):
+        return self.console.remove_handler(handler_id)
 
 
 def debug_events(ev: ConsoleEvent):

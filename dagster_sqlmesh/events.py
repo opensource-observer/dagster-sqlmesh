@@ -2,7 +2,7 @@ from typing import List, Optional, Set, Callable
 import logging
 
 from sqlmesh.core.model import Model
-from sqlmesh.core.snapshot import SnapshotInfoLike, SnapshotId
+from sqlmesh.core.snapshot import SnapshotInfoLike, SnapshotId, Snapshot
 from sqlmesh.core.plan import Plan
 
 from dagster_sqlmesh import console
@@ -12,6 +12,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def show_plan_summary(
+    logger: logging.Logger,
     plan: Plan,
     snapshot_selector: Callable[[SnapshotInfoLike], bool],
     ignored_snapshot_ids: Optional[Set[SnapshotId]] = None,
@@ -58,15 +59,22 @@ def show_plan_summary(
     logger.debug(restated_snapshots)
 
 
-class StatefulConsoleEventHandler:
-    def __init__(self, enable_unknown_event_logging: bool = True):
+class ConsoleRecorder:
+    def __init__(
+        self,
+        log_override: Optional[logging.Logger] = None,
+        enable_unknown_event_logging: bool = True,
+    ):
+        self.logger = log_override or logger
         self._planned_models: List[Model] = []
+        self._updated: List[Snapshot] = []
+        self._successful = False
         self._enable_unknown_event_logging = enable_unknown_event_logging
 
     def __call__(self, event: console.ConsoleEvent):
         match event:
             case console.StartPlanEvaluation(plan):
-                logger.debug("Starting plan evaluation")
+                self.logger.debug("Starting plan evaluation")
                 self._show_summary_for(
                     plan,
                     lambda x: x.is_model,
@@ -74,31 +82,33 @@ class StatefulConsoleEventHandler:
             case console.StartEvaluationProgress(
                 batches, environment_naming_info, default_catalog
             ):
-                logger.debug("STARTING EVALUATION")
-                logger.debug(batches)
-                logger.debug(environment_naming_info)
-                logger.debug(default_catalog)
+                self.logger.debug("STARTING EVALUATION")
+                self.logger.debug(batches)
+                self.logger.debug(environment_naming_info)
+                self.logger.debug(default_catalog)
             case console.UpdatePromotionProgress(snapshot, promoted):
-                logger.debug("UPDATE PROMOTION PROGRESS")
-                logger.debug(snapshot)
-                logger.debug(promoted)
+                self.logger.debug("UPDATE PROMOTION PROGRESS")
+                self.logger.debug(snapshot)
+                self.logger.debug(promoted)
             case console.StopPromotionProgress(success):
-                logger.debug("STOP PROMOTION")
-                logger.debug(success)
+                self.logger.debug("STOP PROMOTION")
+                self.logger.debug(success)
+                self._successful = True
             case console.StartSnapshotEvaluationProgress(snapshot):
-                logger.debug("START SNAPSHOT EVALUATION")
-                logger.debug(snapshot.name)
+                self.logger.debug("START SNAPSHOT EVALUATION")
+                self.logger.debug(snapshot.name)
             case console.UpdateSnapshotEvaluationProgress(
                 snapshot, batch_idx, duration_ms
             ):
-                logger.debug("UPDATE SNAPSHOT EVALUATION")
-                logger.debug(snapshot.name)
-                logger.debug(batch_idx)
-                logger.debug(duration_ms)
+                self._updated.append(snapshot)
+                self.logger.debug("UPDATE SNAPSHOT EVALUATION")
+                self.logger.debug(snapshot.name)
+                self.logger.debug(batch_idx)
+                self.logger.debug(duration_ms)
             case _:
                 if self._enable_unknown_event_logging:
-                    logger.debug("Unhandled event")
-                    logger.debug(event)
+                    self.logger.debug("Unhandled event")
+                    self.logger.debug(event)
 
     def _show_summary_for(
         self,
@@ -106,4 +116,6 @@ class StatefulConsoleEventHandler:
         snapshot_selector: Callable[[SnapshotInfoLike], bool],
         ignored_snapshot_ids: Optional[Set[SnapshotId]] = None,
     ):
-        return show_plan_summary(plan, snapshot_selector, ignored_snapshot_ids)
+        return show_plan_summary(
+            self.logger, plan, snapshot_selector, ignored_snapshot_ids
+        )

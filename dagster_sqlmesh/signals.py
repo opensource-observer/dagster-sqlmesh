@@ -10,9 +10,9 @@ logger.setLevel(logging.DEBUG)
 class DagsterSource(Signal):
     # concrete implementation of abstraction method from Signal
     def check_intervals(self, batch: Batch) -> bool | Batch:
+        """ "Filter the batch to only return the intervals for which the file exists"""
         logger.debug("batches")
         logger.debug(batch)
-        """ "Filter the batch to only return the intervals for which the file exists"""
         return True
 
 
