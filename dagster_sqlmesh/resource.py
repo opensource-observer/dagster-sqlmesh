@@ -1,13 +1,20 @@
 import typing as t
+import threading
+import logging
 
 from dagster import ConfigurableResource, AssetExecutionContext, MaterializeResult
 from sqlmesh.utils.date import TimeLike
 from sqlmesh.core.plan.builder import PlanBuilder
 from sqlmesh.core.config import CategorizerConfig
 
-from dagster_sqlmesh.asset import SQLMeshDagsterTranslator, setup_sqlmesh_controller
-from dagster_sqlmesh.events import ConsoleRecorder
+from .asset import (
+    SQLMeshController,
+    setup_sqlmesh_controller,
+)
+from .utils import key_to_sqlmesh_model_name, sqlmesh_model_name_to_key
+from .events import ConsoleGenerator
 from .config import SQLMeshContextConfig
+from . import console
 
 
 class PlanOptions(t.TypedDict):
@@ -37,6 +44,34 @@ class RunOptions(t.TypedDict):
     execution_time: t.NotRequired[TimeLike]
     skip_janitor: t.NotRequired[bool]
     ignore_cron: t.NotRequired[bool]
+    select_models: t.NotRequired[t.Collection[str]]
+
+
+def _run_sqlmesh_thread(
+    logger: logging.Logger,
+    controller: SQLMeshController,
+    environment: str,
+    plan_options: PlanOptions,
+    run_options: RunOptions,
+):
+    try:
+        builder = t.cast(
+            PlanBuilder,
+            controller.context.plan_builder(
+                environment=environment,
+                **plan_options,
+            ),
+        )
+        plan = builder.build()
+        logger.debug("applying plan")
+        controller.context.apply(plan)
+        logger.debug("running through the scheduler")
+        controller.context.run_with_selected_models(
+            environment=environment, **run_options
+        )
+        logger.debug("done")
+    except Exception as e:
+        logger.error(e)
 
 
 class SQLMeshResource(ConfigurableResource):
@@ -45,50 +80,123 @@ class SQLMeshResource(ConfigurableResource):
     def run(
         self,
         context: AssetExecutionContext,
-        translator: SQLMeshDagsterTranslator,
         environment: str = "dev",
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
-    ) -> t.List[MaterializeResult]:
+    ) -> t.Iterable[MaterializeResult]:
         """Execute SQLMesh based on the configuration given"""
-        logger = context.log
-        controller = self.get_controller()
-        controller.context.plan()
-        recorder = ConsoleRecorder()
+        plan_options = plan_options or {}
+        run_options = run_options or {}
 
-        recorder_handler_id = controller.add_event_handler(recorder)
-        logger.debug("start")
-        builder = t.cast(
-            PlanBuilder,
-            controller.context.plan_builder(
-                environment=environment,
-                **(plan_options or {}),
+        logger = context.log
+        controller = self.get_controller(logger)
+
+        generator = ConsoleGenerator(logger)
+
+        recorder_handler_id = controller.add_event_handler(generator)
+
+        selected_output_names = context.selected_output_names
+        select_models = None
+        if selected_output_names:
+            select_models = set(map(key_to_sqlmesh_model_name, selected_output_names))
+
+        plan_options["select_models"] = select_models or []
+
+        thread = threading.Thread(
+            target=_run_sqlmesh_thread,
+            args=(
+                logger,
+                controller,
+                environment,
+                plan_options or {},
+                run_options or {},
             ),
         )
-        logger.debug("making plan")
-        plan = builder.build()
-        logger.debug("applying plan")
-        controller.context.apply(plan)
-        logger.debug("running through the scheduler")
-        controller.context.run(environment=environment, **(run_options or {}))
+
+        models_map = controller.context.models.copy()
+        if context.selected_output_names:
+            models_map = {}
+            for key, model in controller.context.models.items():
+                if (
+                    sqlmesh_model_name_to_key(model.name)
+                    in context.selected_output_names
+                ):
+                    models_map[key] = model
+        updated = set()
+
+        thread.start()
+        for event in generator.events(thread):
+            match event:
+                case console.StartPlanEvaluation(_plan):
+                    logger.debug("Starting plan evaluation")
+                case console.StartEvaluationProgress(
+                    batches, environment_naming_info, default_catalog
+                ):
+                    logger.debug("STARTING EVALUATION")
+                    logger.debug(batches)
+                    logger.debug(environment_naming_info)
+                    logger.debug(default_catalog)
+                case console.UpdatePromotionProgress(snapshot, promoted):
+                    logger.debug("UPDATE PROMOTION PROGRESS")
+                    logger.debug(snapshot)
+                    logger.debug(promoted)
+                case console.LogSuccess(success):
+                    if success:
+                        all_models = set(models_map.keys())
+                        noop_models = all_models - updated
+                        for model_name in controller.context.dag.sorted:
+                            if model_name not in noop_models:
+                                continue
+                            model = models_map[model_name]
+                            output_key = sqlmesh_model_name_to_key(model.name)
+                            logger.debug(f"MODEL_NAME={model.name}")
+                            logger.debug(
+                                f"ASSET_KEY_FROM_CONTEXT={context.asset_key_for_output(output_key)}"
+                            )
+                            asset_key = context.asset_key_for_output(output_key)
+                            # asset_key = translator.get_asset_key_from_model(
+                            #     controller.context, model
+                            # )
+                            yield MaterializeResult(
+                                asset_key=asset_key,
+                                metadata={
+                                    "updated": False,
+                                    "duration_ms": 0,
+                                },
+                            )
+                        logger.info("sqlmesh ran successfully")
+                        break
+                    else:
+                        raise Exception("sqlmesh failed during run")
+                case console.StartSnapshotEvaluationProgress(snapshot):
+                    logger.debug("START SNAPSHOT EVALUATION")
+                    logger.debug(snapshot.name)
+                case console.UpdateSnapshotEvaluationProgress(
+                    snapshot, batch_idx, duration_ms
+                ):
+                    logger.debug("UPDATE SNAPSHOT EVALUATION")
+                    logger.debug(snapshot.name)
+                    logger.debug(batch_idx)
+                    logger.debug(duration_ms)
+                    model = snapshot.model
+                    output_key = sqlmesh_model_name_to_key(model.name)
+                    logger.debug(f"MODEL_NAME={model.name}")
+                    logger.debug(
+                        f"ASSET_KEY_FROM_CONTEXT={context.asset_key_for_output(output_key)}"
+                    )
+                    asset_key = context.asset_key_for_output(output_key)
+                    yield MaterializeResult(
+                        asset_key=asset_key,
+                        metadata={"updated": True, "duration_ms": duration_ms},
+                    )
+                    updated.add(snapshot.model.fqn)
+                case _:
+                    logger.debug("Unhandled event")
+                    logger.debug(event)
+        thread.join()
+
         controller.remove_event_handler(recorder_handler_id)
         controller.context.close()
 
-        materialized: t.List[MaterializeResult] = []
-        for updated in recorder._updated:
-            asset_key = translator.get_asset_key_from_model(
-                controller.context, updated.model
-            )
-            materialized.append(
-                MaterializeResult(
-                    asset_key=asset_key,
-                    metadata={
-                        "updated": True,
-                    },
-                )
-            )
-        logger.debug(recorder._updated)
-        return materialized
-
-    def get_controller(self):
-        return setup_sqlmesh_controller(self.config)
+    def get_controller(self, log_override: t.Optional[logging.Logger] = None):
+        return setup_sqlmesh_controller(self.config, log_override=log_override)

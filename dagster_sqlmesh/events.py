@@ -1,5 +1,7 @@
-from typing import List, Optional, Set, Callable
+from typing import List, Optional, Set, Callable, Iterator
 import logging
+import queue
+import threading
 
 from sqlmesh.core.model import Model
 from sqlmesh.core.snapshot import SnapshotInfoLike, SnapshotId, Snapshot
@@ -57,6 +59,24 @@ def show_plan_summary(
     logger.debug(modified_snapshot_ids)
     logger.debug("restated_snapshots")
     logger.debug(restated_snapshots)
+
+
+class ConsoleGenerator:
+    def __init__(self, log_override: Optional[logging.Logger] = None):
+        self._queue = queue.Queue()
+        self.logger = log_override or logger
+
+    def __call__(self, event: console.ConsoleEvent):
+        self._queue.put(event)
+
+    def events(self, thread: threading.Thread) -> Iterator[console.ConsoleEvent]:
+        while thread.is_alive() or not self._queue.empty():
+            try:
+                # Get arguments from the queue with a timeout
+                args = self._queue.get(timeout=0.1)
+                yield args
+            except queue.Empty:
+                continue
 
 
 class ConsoleRecorder:

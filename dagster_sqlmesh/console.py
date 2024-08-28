@@ -2,6 +2,7 @@ from typing import Optional, Dict, Set, Union, Callable
 from dataclasses import dataclass
 import uuid
 import unittest
+import logging
 
 from sqlmesh.core.console import Console
 from sqlmesh.core.plan import Plan
@@ -14,6 +15,8 @@ from sqlmesh.core.snapshot import (
     SnapshotId,
     SnapshotInfoLike,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -261,8 +264,10 @@ ConsoleEventHandler = Callable[[ConsoleEvent], None]
 
 
 class EventConsole(Console):
-    def __init__(self):
+    def __init__(self, log_override: Optional[logging.Logger] = None):
         self._handlers: Dict[str, ConsoleEventHandler] = {}
+        self.logger = log_override or logger
+        self.id = str(uuid.uuid4())
 
     def start_plan_evaluation(self, plan: Plan) -> None:
         self.publish(StartPlanEvaluation(plan))
@@ -426,11 +431,15 @@ class EventConsole(Console):
         self.publish(ShowRowDiff(row_diff, show_sample, skip_grain_check))
 
     def publish(self, event: ConsoleEvent) -> None:
+        self.logger.debug(
+            f"EventConsole[{self.id}]: sending event to {len(self._handlers)}"
+        )
         for handler in self._handlers.values():
             handler(event)
 
     def add_handler(self, handler: ConsoleEventHandler):
         handler_id = str(uuid.uuid4())
+        self.logger.debug(f"EventConsole[{self.id}]: Adding handler {handler_id}")
         self._handlers[handler_id] = handler
         return handler_id
 
