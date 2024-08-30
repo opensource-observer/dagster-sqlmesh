@@ -24,7 +24,7 @@ from dagster import (
     AssetExecutionContext,
     Definitions,
 )
-from dagster_sqlmesh import sqlmesh_asset, SQLMeshContextConfig, SQLMeshResource
+from dagster_sqlmesh import sqlmesh_assets, SQLMeshContextConfig, SQLMeshResource
 
 sqlmesh_config = SQLMeshContextConfig(path="/home/foo/sqlmesh_project", gateway="name-of-your-gateway")
 
