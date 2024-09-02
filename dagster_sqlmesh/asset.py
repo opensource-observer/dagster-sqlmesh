@@ -32,7 +32,6 @@ from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 from sqlmesh.core.scheduler import Scheduler
 
 from dagster_sqlmesh.scheduler import DagsterSQLMeshScheduler
-from dagster_sqlmesh.signals import signal_factory
 from .config import SQLMeshContextConfig
 from .console import ConsoleEvent, EventConsole, ConsoleEventHandler, DebugEventConsole
 from .utils import sqlmesh_model_name_to_key
@@ -172,7 +171,6 @@ class DagsterSQLMeshContext(Context):
             max_workers=self.concurrent_tasks,
             console=self.console,
             notification_target_manager=self.notification_target_manager,
-            signal_factory=self._signal_factory,
         )
 
     def run_with_selected_models(
@@ -264,7 +262,6 @@ def setup_sqlmesh_controller(
         paths=config.path,
         gateway=config.gateway,
         console=console,
-        signal_factory=signal_factory,
     )
     if config.sqlmesh_config:
         options["config"] = config.sqlmesh_config
