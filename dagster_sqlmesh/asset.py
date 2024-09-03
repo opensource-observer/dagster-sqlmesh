@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-import typing as t
 from typing import (
     Union,
     Iterable,
@@ -12,8 +11,6 @@ from typing import (
 import logging
 
 from sqlmesh.core.context import Context
-from sqlmesh.utils.date import TimeLike
-from sqlmesh.core.snapshot import Snapshot
 from sqlmesh.core.console import Console
 from sqlmesh.core.model import Model
 from dagster import (
@@ -25,16 +22,12 @@ from dagster import (
     AssetKey,
     RetryPolicy,
 )
-from sqlmesh.utils.errors import (
-    ConfigError,
-)
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
-from sqlmesh.core.scheduler import Scheduler
 
-from dagster_sqlmesh.scheduler import DagsterSQLMeshScheduler
 from .config import SQLMeshContextConfig
-from .console import ConsoleEvent, EventConsole, ConsoleEventHandler, DebugEventConsole
+from .console import EventConsole, ConsoleEventHandler, DebugEventConsole
 from .utils import sqlmesh_model_name_to_key
+from .context import DagsterSQLMeshContext
 
 logger = logging.getLogger(__name__)
 
@@ -125,77 +118,6 @@ def sqlmesh_assets(
     )
 
 
-class DagsterSQLMeshContext(Context):
-    """Custom sqlmesh context so that we can inject selected models to the
-    scheduler when running sqlmesh."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._selected_models: t.Set[str] = set()
-
-    def set_selected_models(self, models: t.Set[str]):
-        self._selected_models = models
-
-    def scheduler(self, environment: str | None = None) -> Scheduler:
-        """Return a custom scheduler. This uses copy pasted code from the
-        original context. We will make a PR upstream to make this a little more
-        reliable"""
-
-        snapshots: t.Iterable[Snapshot]
-        if environment is not None:
-            stored_environment = self.state_sync.get_environment(environment)
-            if stored_environment is None:
-                raise ConfigError(f"Environment '{environment}' was not found.")
-            snapshots = self.state_sync.get_snapshots(
-                stored_environment.snapshots
-            ).values()
-        else:
-            snapshots = self.snapshots.values()
-
-        if not snapshots:
-            raise ConfigError("No models were found")
-
-        selected_snapshots: t.Set[str] = set()
-        if len(self._selected_models) > 0:
-            matched_snapshots = filter(
-                lambda a: a.model.name in self._selected_models, snapshots
-            )
-            selected_snapshots = set(map(lambda a: a.name, matched_snapshots))
-
-        return DagsterSQLMeshScheduler(
-            selected_snapshots,
-            snapshots,
-            self.snapshot_evaluator,
-            self.state_sync,
-            default_catalog=self.default_catalog,
-            max_workers=self.concurrent_tasks,
-            console=self.console,
-            notification_target_manager=self.notification_target_manager,
-        )
-
-    def run_with_selected_models(
-        self,
-        environment: t.Optional[str] = None,
-        start: t.Optional[TimeLike] = None,
-        end: t.Optional[TimeLike] = None,
-        execution_time: t.Optional[TimeLike] = None,
-        skip_janitor: bool = False,
-        ignore_cron: bool = False,
-        select_models: t.Optional[t.Collection[str]] = None,
-    ):
-        if select_models:
-            self.set_selected_models(set(select_models))
-
-        return self.run(
-            environment=environment,
-            start=start,
-            end=end,
-            execution_time=execution_time,
-            skip_janitor=skip_janitor,
-            ignore_cron=ignore_cron,
-        )
-
-
 @dataclass
 class SQLMeshController:
     console: EventConsole
@@ -244,10 +166,6 @@ class SQLMeshController:
 
         output.deps = list(depsMap.values())
         return output
-
-
-def debug_events(ev: ConsoleEvent):
-    print(ev)
 
 
 def setup_sqlmesh_controller(

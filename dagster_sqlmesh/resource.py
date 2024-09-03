@@ -57,7 +57,7 @@ def _run_sqlmesh_thread(
     try:
         builder = t.cast(
             PlanBuilder,
-            controller.context.plan_builder(
+            controller.context.model_selectable_plan_builder(
                 environment=environment,
                 **plan_options,
             ),
