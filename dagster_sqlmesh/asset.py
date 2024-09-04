@@ -10,6 +10,8 @@ from typing import (
 )
 import logging
 
+import sqlglot
+from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.console import Console
 from sqlmesh.core.model import Model
@@ -73,8 +75,15 @@ class SQLMeshDagsterTranslator:
         return AssetKey(model.view_name)
 
     def get_asset_key_fqn(self, context: Context, fqn: str) -> AssetKey:
-        parsed_fqn = parse_fqn(fqn)
-        return AssetKey(parsed_fqn.view_name)
+        table = self.get_fqn_to_table(context, fqn)
+        return AssetKey(table.name)
+
+    def get_fqn_to_table(self, context: Context, fqn: str) -> exp.Table:
+        dialect = self.get_context_dialect(context)
+        return sqlglot.to_table(fqn, dialect=dialect)
+
+    def get_context_dialect(self, context: Context) -> str:
+        return context.engine_adapter.dialect
 
     # def get_asset_deps(
     #     self, context: Context, model: Model, deps: List[SQLMeshModelDep]
@@ -136,6 +145,7 @@ class SQLMeshController:
         dag = context.dag
         output = SQLMeshMultiAssetOptions()
         depsMap: Dict[str, CoercibleToAssetDep] = {}
+
         for model_fqn, deps in dag.graph.items():
             logger.debug(f"model found: {model_fqn}")
             model = context.get_model(model_fqn)
@@ -156,10 +166,11 @@ class SQLMeshController:
                         translator.get_asset_key_from_model(context, dep.model)
                     )
                 else:
+                    table = translator.get_fqn_to_table(context, dep.fqn)
                     key = translator.get_asset_key_fqn(context, dep.fqn)
                     internal_asset_deps.add(key)
                     # create an external dep
-                    depsMap[dep.parse_fqn().view_name] = AssetDep(key)
+                    depsMap[table.name] = AssetDep(key)
             model_key = sqlmesh_model_name_to_key(model.name)
             output.outs[model_key] = AssetOut(key=asset_out, is_required=False)
             output.internal_asset_deps[model_key] = internal_asset_deps
