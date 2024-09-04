@@ -6,6 +6,7 @@ from dagster import ConfigurableResource, AssetExecutionContext, MaterializeResu
 from sqlmesh.utils.date import TimeLike
 from sqlmesh.core.plan.builder import PlanBuilder
 from sqlmesh.core.config import CategorizerConfig
+from sqlmesh.core.snapshot import Snapshot
 
 from .asset import (
     SQLMeshController,
@@ -57,7 +58,7 @@ def _run_sqlmesh_thread(
     try:
         builder = t.cast(
             PlanBuilder,
-            controller.context.model_selectable_plan_builder(
+            controller.context.plan_builder(
                 environment=environment,
                 **plan_options,
             ),
@@ -72,6 +73,23 @@ def _run_sqlmesh_thread(
         logger.debug("done")
     except Exception as e:
         logger.error(e)
+
+
+class MaterializationTracker:
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+        self._batches: t.Dict[Snapshot, int] = {}
+        self._count: t.Dict[Snapshot, int] = {}
+
+    def plan(self, batches: t.Dict[Snapshot, int]):
+        self._batches = batches
+        self._count: t.Dict[Snapshot, int] = {snap: 0 for snap in batches.keys()}
+
+    def update(self, snapshot: Snapshot, _batch_idx: int) -> bool:
+        self._count[snapshot] += 1
+        if self._batches[snapshot] == self._count[snapshot]:
+            return True
+        return False
 
 
 class SQLMeshResource(ConfigurableResource):
@@ -95,12 +113,12 @@ class SQLMeshResource(ConfigurableResource):
 
         recorder_handler_id = controller.add_event_handler(generator)
 
-        selected_output_names = context.selected_output_names
-        select_models = None
-        if selected_output_names:
-            select_models = set(map(key_to_sqlmesh_model_name, selected_output_names))
+        # selected_output_names = context.selected_output_names
+        # select_models = None
+        # if selected_output_names:
+        #     select_models = set(map(key_to_sqlmesh_model_name, selected_output_names))
 
-        plan_options["select_models"] = select_models or []
+        plan_options["select_models"] = []
 
         thread = threading.Thread(
             target=_run_sqlmesh_thread,
@@ -124,6 +142,8 @@ class SQLMeshResource(ConfigurableResource):
                     models_map[key] = model
         updated = set()
 
+        tracker = MaterializationTracker(logger)
+
         thread.start()
         for event in generator.events(thread):
             match event:
@@ -136,6 +156,7 @@ class SQLMeshResource(ConfigurableResource):
                     logger.debug(batches)
                     logger.debug(environment_naming_info)
                     logger.debug(default_catalog)
+                    tracker.plan(batches)
                 case console.UpdatePromotionProgress(snapshot, promoted):
                     logger.debug("UPDATE PROMOTION PROGRESS")
                     logger.debug(snapshot)
@@ -178,18 +199,20 @@ class SQLMeshResource(ConfigurableResource):
                     logger.debug(snapshot.name)
                     logger.debug(batch_idx)
                     logger.debug(duration_ms)
-                    model = snapshot.model
-                    output_key = sqlmesh_model_name_to_key(model.name)
-                    logger.debug(f"MODEL_NAME={model.name}")
-                    logger.debug(
-                        f"ASSET_KEY_FROM_CONTEXT={context.asset_key_for_output(output_key)}"
-                    )
-                    asset_key = context.asset_key_for_output(output_key)
-                    yield MaterializeResult(
-                        asset_key=asset_key,
-                        metadata={"updated": True, "duration_ms": duration_ms},
-                    )
-                    updated.add(snapshot.model.fqn)
+                    if tracker.update(snapshot, batch_idx):
+                        model = snapshot.model
+                        output_key = sqlmesh_model_name_to_key(model.name)
+                        logger.debug("Success during update snapshot evaluation")
+                        logger.debug(f"MODEL_NAME={model.name}")
+                        logger.debug(
+                            f"ASSET_KEY_FROM_CONTEXT={context.asset_key_for_output(output_key)}"
+                        )
+                        asset_key = context.asset_key_for_output(output_key)
+                        yield MaterializeResult(
+                            asset_key=asset_key,
+                            metadata={"updated": True, "duration_ms": duration_ms},
+                        )
+                        updated.add(snapshot.model.fqn)
                 case _:
                     logger.debug("Unhandled event")
                     logger.debug(event)

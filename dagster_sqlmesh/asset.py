@@ -114,7 +114,7 @@ def sqlmesh_assets(
         compute_kind=compute_kind,
         retry_policy=retry_policy,
         required_resource_keys=required_resource_keys,
-        can_subset=True,
+        # can_subset=True,
     )
 
 
