@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dagster-sqlmesh"
-version = "0.2.0.dev3"
+version = "0.2.0"
 description = ""
 authors = ["Reuven Gonzales <reuven.v.gonzales@gmail.com>"]
 license = "Apache 2.0"
