@@ -93,12 +93,9 @@ class ConsoleRecorder:
 
     def __call__(self, event: console.ConsoleEvent):
         match event:
-            case console.StartPlanEvaluation(plan):
+            case console.StartPlanEvaluation(evaluatable_plan):
                 self.logger.debug("Starting plan evaluation")
-                self._show_summary_for(
-                    plan,
-                    lambda x: x.is_model,
-                )
+                print(evaluatable_plan.plan_id)
             case console.StartEvaluationProgress(
                 batches, environment_naming_info, default_catalog
             ):

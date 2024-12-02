@@ -1,18 +1,18 @@
-from typing import Optional, Dict, Set, Union, Callable
+import typing as t
+from typing import Dict, Union, Callable
 from dataclasses import dataclass
 import uuid
 import unittest
 import logging
 
 from sqlmesh.core.console import Console
-from sqlmesh.core.plan import Plan
+from sqlmesh.core.plan import Plan, EvaluatablePlan
 from sqlmesh.core.context_diff import ContextDiff
 from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.core.table_diff import RowDiff, SchemaDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.snapshot import (
     Snapshot,
-    SnapshotId,
     SnapshotInfoLike,
 )
 
@@ -36,7 +36,7 @@ class StopMigrationProgress:
 
 @dataclass
 class StartPlanEvaluation:
-    plan: Plan
+    evaluatable_plan: EvaluatablePlan
 
 
 @dataclass
@@ -48,7 +48,7 @@ class StopPlanEvaluation:
 class StartEvaluationProgress:
     batches: Dict[Snapshot, int]
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: Optional[str]
+    default_catalog: t.Optional[str]
 
 
 @dataclass
@@ -60,7 +60,7 @@ class StartSnapshotEvaluationProgress:
 class UpdateSnapshotEvaluationProgress:
     snapshot: Snapshot
     batch_idx: int
-    duration_ms: Optional[int]
+    duration_ms: t.Optional[int]
 
 
 @dataclass
@@ -72,7 +72,7 @@ class StopEvaluationProgress:
 class StartCreationProgress:
     total_tasks: int
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: Optional[str]
+    default_catalog: t.Optional[str]
 
 
 @dataclass
@@ -104,7 +104,7 @@ class StopCleanup:
 class StartPromotionProgress:
     total_tasks: int
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: Optional[str]
+    default_catalog: t.Optional[str]
 
 
 @dataclass
@@ -157,16 +157,15 @@ class StopEnvMigrationProgress:
 class ShowModelDifferenceSummary:
     context_diff: ContextDiff
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: Optional[str]
+    default_catalog: t.Optional[str]
     no_diff: bool = True
-    ignored_snapshot_ids: Optional[Set[SnapshotId]] = None
 
 
 @dataclass
 class PlanEvent:
     plan_builder: PlanBuilder
     auto_apply: bool
-    default_catalog: Optional[str]
+    default_catalog: t.Optional[str]
     no_diff: bool = False
     no_prompts: bool = False
 
@@ -174,7 +173,7 @@ class PlanEvent:
 @dataclass
 class LogTestResults:
     result: unittest.result.TestResult
-    output: str
+    output: t.Optional[str]
     target_dialect: str
 
 
@@ -200,7 +199,7 @@ class LogSuccess:
 
 @dataclass
 class LoadingStart:
-    message: Optional[str] = None
+    message: t.Optional[str] = None
     id: uuid.UUID = uuid.uuid4()
 
 
@@ -264,12 +263,12 @@ ConsoleEventHandler = Callable[[ConsoleEvent], None]
 
 
 class EventConsole(Console):
-    def __init__(self, log_override: Optional[logging.Logger] = None):
+    def __init__(self, log_override: t.Optional[logging.Logger] = None):
         self._handlers: Dict[str, ConsoleEventHandler] = {}
         self.logger = log_override or logger
         self.id = str(uuid.uuid4())
 
-    def start_plan_evaluation(self, plan: Plan) -> None:
+    def start_plan_evaluation(self, plan: EvaluatablePlan) -> None:
         self.publish(StartPlanEvaluation(plan))
 
     def stop_plan_evaluation(self) -> None:
@@ -279,7 +278,7 @@ class EventConsole(Console):
         self,
         batches: Dict[Snapshot, int],
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
     ) -> None:
         self.publish(
             StartEvaluationProgress(batches, environment_naming_info, default_catalog)
@@ -289,7 +288,7 @@ class EventConsole(Console):
         self.publish(StartSnapshotEvaluationProgress(snapshot))
 
     def update_snapshot_evaluation_progress(
-        self, snapshot: Snapshot, batch_idx: int, duration_ms: Optional[int]
+        self, snapshot: Snapshot, batch_idx: int, duration_ms: t.Optional[int]
     ) -> None:
         self.publish(UpdateSnapshotEvaluationProgress(snapshot, batch_idx, duration_ms))
 
@@ -300,7 +299,7 @@ class EventConsole(Console):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
     ) -> None:
         self.publish(
             StartCreationProgress(total_tasks, environment_naming_info, default_catalog)
@@ -327,7 +326,7 @@ class EventConsole(Console):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
     ) -> None:
         self.publish(
             StartPromotionProgress(
@@ -368,9 +367,8 @@ class EventConsole(Console):
         self,
         context_diff: ContextDiff,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
         no_diff: bool = True,
-        ignored_snapshot_ids: Optional[Set[SnapshotId]] = None,
     ) -> None:
         self.publish(
             ShowModelDifferenceSummary(
@@ -378,7 +376,6 @@ class EventConsole(Console):
                 environment_naming_info,
                 default_catalog,
                 no_diff,
-                ignored_snapshot_ids,
             )
         )
 
@@ -386,7 +383,7 @@ class EventConsole(Console):
         self,
         plan_builder: PlanBuilder,
         auto_apply: bool,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
         no_diff: bool = False,
         no_prompts: bool = False,
     ) -> None:
@@ -395,7 +392,10 @@ class EventConsole(Console):
         )
 
     def log_test_results(
-        self, result: unittest.result.TestResult, output: str, target_dialect: str
+        self,
+        result: unittest.result.TestResult,
+        output: t.Optional[str],
+        target_dialect: str,
     ) -> None:
         self.publish(LogTestResults(result, output, target_dialect))
 
@@ -411,7 +411,7 @@ class EventConsole(Console):
     def log_success(self, message: str) -> None:
         self.publish(LogSuccess(message))
 
-    def loading_start(self, message: Optional[str] = None) -> uuid.UUID:
+    def loading_start(self, message: t.Optional[str] = None) -> uuid.UUID:
         event_id = uuid.uuid4()
         self.publish(LoadingStart(message, event_id))
         return event_id
@@ -452,7 +452,7 @@ class DebugEventConsole(EventConsole):
         super().__init__()
         self._console = console
 
-    def start_plan_evaluation(self, plan: Plan) -> None:
+    def start_plan_evaluation(self, plan: EvaluatablePlan) -> None:
         super().start_plan_evaluation(plan)
         self._console.start_plan_evaluation(plan)
 
@@ -464,7 +464,7 @@ class DebugEventConsole(EventConsole):
         self,
         batches: Dict[Snapshot, int],
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
     ) -> None:
         super().start_evaluation_progress(
             batches, environment_naming_info, default_catalog
@@ -478,7 +478,7 @@ class DebugEventConsole(EventConsole):
         self._console.start_snapshot_evaluation_progress(snapshot)
 
     def update_snapshot_evaluation_progress(
-        self, snapshot: Snapshot, batch_idx: int, duration_ms: Optional[int]
+        self, snapshot: Snapshot, batch_idx: int, duration_ms: t.Optional[int]
     ) -> None:
         super().update_snapshot_evaluation_progress(snapshot, batch_idx, duration_ms)
         self._console.update_snapshot_evaluation_progress(
@@ -493,7 +493,7 @@ class DebugEventConsole(EventConsole):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
     ) -> None:
         super().start_creation_progress(
             total_tasks, environment_naming_info, default_catalog
@@ -518,7 +518,7 @@ class DebugEventConsole(EventConsole):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
     ) -> None:
         super().start_promotion_progress(
             total_tasks, environment_naming_info, default_catalog
@@ -541,30 +541,28 @@ class DebugEventConsole(EventConsole):
         self,
         context_diff: ContextDiff,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
         no_diff: bool = True,
-        ignored_snapshot_ids: Optional[Set[SnapshotId]] = None,
     ) -> None:
         super().show_model_difference_summary(
             context_diff,
             environment_naming_info,
             default_catalog,
             no_diff,
-            ignored_snapshot_ids,
         )
         self._console.show_model_difference_summary(
             context_diff,
             environment_naming_info,
             default_catalog,
             no_diff,
-            ignored_snapshot_ids,
+            # ignored_snapshot_ids,
         )
 
     def plan(
         self,
         plan_builder: PlanBuilder,
         auto_apply: bool,
-        default_catalog: Optional[str],
+        default_catalog: t.Optional[str],
         no_diff: bool = False,
         no_prompts: bool = False,
     ) -> None:
@@ -574,7 +572,10 @@ class DebugEventConsole(EventConsole):
         )
 
     def log_test_results(
-        self, result: unittest.result.TestResult, output: str, target_dialect: str
+        self,
+        result: unittest.result.TestResult,
+        output: t.Optional[str],
+        target_dialect: str,
     ) -> None:
         super().log_test_results(result, output, target_dialect)
         self._console.log_test_results(result, output, target_dialect)
@@ -595,7 +596,7 @@ class DebugEventConsole(EventConsole):
         super().log_success(message)
         self._console.log_success(message)
 
-    def loading_start(self, message: Optional[str] = None) -> uuid.UUID:
+    def loading_start(self, message: t.Optional[str] = None) -> uuid.UUID:
         event_id = super().loading_start(message)
         self._console.loading_start(message)
         return event_id
