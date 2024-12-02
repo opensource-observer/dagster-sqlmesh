@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import typing as t
 from typing import (
     Union,
     Iterable,
@@ -29,7 +30,6 @@ from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 from .config import SQLMeshContextConfig
 from .console import EventConsole, ConsoleEventHandler, DebugEventConsole
 from .utils import sqlmesh_model_name_to_key
-from .context import DagsterSQLMeshContext
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +129,10 @@ def sqlmesh_assets(
 
 @dataclass
 class SQLMeshController:
+    """Allows controlling sqlmesh as a library"""
+
     console: EventConsole
-    context: DagsterSQLMeshContext
+    context: Context
 
     def add_event_handler(self, handler: ConsoleEventHandler):
         return self.console.add_handler(handler)
@@ -178,6 +180,12 @@ class SQLMeshController:
         output.deps = list(depsMap.values())
         return output
 
+    def reload_context(self, path: str):
+        """Reload the context"""
+
+    def plan_and_run(self, select_models: t.Optional[t.Set[str]] = None):
+        pass
+
 
 def setup_sqlmesh_controller(
     config: SQLMeshContextConfig,
@@ -194,7 +202,7 @@ def setup_sqlmesh_controller(
     )
     if config.sqlmesh_config:
         options["config"] = config.sqlmesh_config
-    context = DagsterSQLMeshContext(**options)
+    context = Context(**options)
     return SQLMeshController(
         console=console,
         context=context,

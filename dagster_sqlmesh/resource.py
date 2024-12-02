@@ -74,9 +74,7 @@ def _run_sqlmesh_thread(
         logger.debug("applying plan")
         controller.context.apply(plan)
         logger.debug("running through the scheduler")
-        controller.context.run_with_selected_models(
-            environment=environment, **run_options
-        )
+        controller.context.run(environment=environment, **run_options)
         logger.debug("done")
     except Exception as e:
         logger.error(e)

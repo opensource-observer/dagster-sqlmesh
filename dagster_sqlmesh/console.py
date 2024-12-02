@@ -6,13 +6,14 @@ import unittest
 import logging
 
 from sqlmesh.core.console import Console
-from sqlmesh.core.plan import Plan, EvaluatablePlan
+from sqlmesh.core.plan import EvaluatablePlan
 from sqlmesh.core.context_diff import ContextDiff
 from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.core.table_diff import RowDiff, SchemaDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.snapshot import (
     Snapshot,
+    SnapshotChangeCategory,
     SnapshotInfoLike,
 )
 
@@ -261,12 +262,22 @@ ConsoleEvent = Union[
 
 ConsoleEventHandler = Callable[[ConsoleEvent], None]
 
+type SnapshotCategorizer = t.Callable[
+    [Snapshot, PlanBuilder, str | None], SnapshotChangeCategory
+]
+
 
 class EventConsole(Console):
+    categorizer: t.Optional[SnapshotCategorizer] = None
+
     def __init__(self, log_override: t.Optional[logging.Logger] = None):
         self._handlers: Dict[str, ConsoleEventHandler] = {}
         self.logger = log_override or logger
         self.id = str(uuid.uuid4())
+        self.categorizer = None
+
+    def add_snapshot_categorizer(self, categorizer: SnapshotCategorizer):
+        self.categorizer = categorizer
 
     def start_plan_evaluation(self, plan: EvaluatablePlan) -> None:
         self.publish(StartPlanEvaluation(plan))
@@ -387,6 +398,14 @@ class EventConsole(Console):
         no_diff: bool = False,
         no_prompts: bool = False,
     ) -> None:
+        plan = plan_builder.build()
+
+        for snapshot in plan.uncategorized:
+            if self.categorizer:
+                plan_builder.set_choice(
+                    snapshot, self.categorizer(snapshot, plan_builder, default_catalog)
+                )
+
         self.publish(
             PlanEvent(plan_builder, auto_apply, default_catalog, no_diff, no_prompts)
         )
