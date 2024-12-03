@@ -1,5 +1,4 @@
 import typing as t
-import threading
 import logging
 
 from dagster import (
@@ -8,81 +7,21 @@ from dagster import (
     MaterializeResult,
 )
 from sqlmesh import Model
-from sqlmesh.utils.date import TimeLike
 from sqlmesh.utils.dag import DAG
-from sqlmesh.core.plan.builder import PlanBuilder
-from sqlmesh.core.config import CategorizerConfig
 from sqlmesh.core.snapshot import Snapshot
 from sqlmesh.core.context import Context as SQLMeshContext
 
-from .asset import (
-    SQLMeshController,
-    setup_sqlmesh_controller,
-)
 from .utils import sqlmesh_model_name_to_key
-from .events import ConsoleGenerator
 from .config import SQLMeshContextConfig
+from .controller.base import SQLMeshController, PlanOptions, RunOptions
 from . import console
 
 
-class PlanOptions(t.TypedDict):
-    start: t.NotRequired[TimeLike]
-    end: t.NotRequired[TimeLike]
-    execution_time: t.NotRequired[TimeLike]
-    create_from: t.NotRequired[str]
-    skip_tests: t.NotRequired[bool]
-    restate_models: t.NotRequired[t.Iterable[str]]
-    no_gaps: t.NotRequired[bool]
-    skip_backfill: t.NotRequired[bool]
-    forward_only: t.NotRequired[bool]
-    allow_destructive_models: t.NotRequired[t.Collection[str]]
-    no_auto_categorization: t.NotRequired[bool]
-    effective_from: t.NotRequired[TimeLike]
-    include_unmodified: t.NotRequired[bool]
-    select_models: t.NotRequired[t.Collection[str]]
-    backfill_models: t.NotRequired[t.Collection[str]]
-    categorizer_config: t.NotRequired[CategorizerConfig]
-    enable_preview: t.NotRequired[bool]
-    run: t.NotRequired[bool]
-
-
-class RunOptions(t.TypedDict):
-    start: t.NotRequired[TimeLike]
-    end: t.NotRequired[TimeLike]
-    execution_time: t.NotRequired[TimeLike]
-    skip_janitor: t.NotRequired[bool]
-    ignore_cron: t.NotRequired[bool]
-    select_models: t.NotRequired[t.Collection[str]]
-
-
-def _run_sqlmesh_thread(
-    logger: logging.Logger,
-    controller: SQLMeshController,
-    environment: str,
-    plan_options: PlanOptions,
-    run_options: RunOptions,
-):
-    try:
-        builder = t.cast(
-            PlanBuilder,
-            controller.context.plan_builder(
-                environment=environment,
-                **plan_options,
-            ),
-        )
-        plan = builder.build()
-        logger.debug("applying plan")
-        controller.context.apply(plan)
-        logger.debug("running through the scheduler")
-        controller.context.run_with_selected_models(
-            environment=environment, **run_options
-        )
-        logger.debug("done")
-    except Exception as e:
-        logger.error(e)
-
-
 class MaterializationTracker:
+    """Tracks sqlmesh materializations and notifies dagster in the correct
+    order. This is necessary because sqlmesh may skip some materializations that
+    have no changes and those will be reported as completed out of order."""
+
     def __init__(self, sorted_dag: t.List[str], logger: logging.Logger):
         self.logger = logger
         self._batches: t.Dict[Snapshot, int] = {}
@@ -162,12 +101,10 @@ class DagsterSQLMeshEventHandler:
     def __init__(
         self,
         context: AssetExecutionContext,
-        sqlmesh_context: SQLMeshContext,
         models_map: t.Dict[str, Model],
         dag: DAG,
         prefix: str,
     ):
-        self._sqlmesh_context = sqlmesh_context
         self._models_map = models_map
         self._prefix = prefix
         self._context = context
@@ -175,13 +112,15 @@ class DagsterSQLMeshEventHandler:
         self._tracker = MaterializationTracker(dag.sorted[:], self._logger)
         self._stage = "plan"
 
-    def process_events(self, event: console.ConsoleEvent):
+    def process_events(
+        self, sqlmesh_context: SQLMeshContext, event: console.ConsoleEvent
+    ):
         self.report_event(event)
 
         notify = self._tracker.notify_queue_next()
         while notify is not None:
             completed_name, update_status = notify
-            if not self._sqlmesh_context.get_model(completed_name):
+            if not sqlmesh_context.get_model(completed_name):
                 notify = self._tracker.notify_queue_next()
                 continue
             model = self._models_map[completed_name]
@@ -289,47 +228,29 @@ class SQLMeshResource(ConfigurableResource):
         logger = context.log
 
         controller = self.get_controller(logger)
-        dag = controller.context.dag
-
-        generator = ConsoleGenerator(logger)
-
-        recorder_handler_id = controller.add_event_handler(generator)
+        dag = controller.models_dag()
 
         plan_options["select_models"] = []
 
-        thread = threading.Thread(
-            target=_run_sqlmesh_thread,
-            args=(
-                logger,
-                controller,
-                environment,
-                plan_options or {},
-                run_options or {},
-            ),
-        )
-
-        models_map = controller.context.models.copy()
+        models = controller.models()
+        models_map = models.copy()
         if context.selected_output_names:
             models_map = {}
-            for key, model in controller.context.models.items():
+            for key, model in models.items():
                 if (
                     sqlmesh_model_name_to_key(model.name)
                     in context.selected_output_names
                 ):
                     models_map[key] = model
 
-        thread.start()
         event_handler = DagsterSQLMeshEventHandler(
-            context, controller.context, models_map, dag, "sqlmesh: "
+            context, models_map, dag, "sqlmesh: "
         )
 
-        for event in generator.events(thread):
-            yield from event_handler.process_events(event)
-
-        thread.join()
-
-        controller.remove_event_handler(recorder_handler_id)
-        controller.context.close()
+        for sqlmesh_context, event in controller.plan_and_run(
+            environment=environment, plan_options=plan_options, run_options=run_options
+        ):
+            yield from event_handler.process_events(sqlmesh_context, event)
 
     def get_controller(self, log_override: t.Optional[logging.Logger] = None):
-        return setup_sqlmesh_controller(self.config, log_override=log_override)
+        return SQLMeshController.setup(self.config, log_override=log_override)
