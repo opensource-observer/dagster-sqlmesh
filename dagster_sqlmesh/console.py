@@ -268,7 +268,7 @@ ConsoleEvent = Union[
 
 ConsoleEventHandler = Callable[[ConsoleEvent], None]
 
-type SnapshotCategorizer = t.Callable[
+SnapshotCategorizer = t.Callable[
     [Snapshot, PlanBuilder, str | None], SnapshotChangeCategory
 ]
 
