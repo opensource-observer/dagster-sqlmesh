@@ -4,13 +4,12 @@ import tempfile
 import shutil
 import os
 from dataclasses import dataclass
-from typing import cast, List, Optional, Any, Dict
+import typing as t
 
 import pytest
 import duckdb
 import polars
 from sqlmesh.utils.date import TimeLike
-from sqlmesh.core.plan.builder import PlanBuilder
 from sqlmesh.core.console import get_console
 from sqlmesh.core.config import (
     Config as SQLMeshConfig,
@@ -20,8 +19,9 @@ from sqlmesh.core.config import (
 )
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
-from dagster_sqlmesh.events import ConsoleRecorder, show_plan_summary
-from dagster_sqlmesh.asset import setup_sqlmesh_controller
+from dagster_sqlmesh.events import ConsoleRecorder
+from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
+from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,9 @@ class SQLMeshTestContext:
         console = None
         if enable_debug_console:
             console = get_console()
-        return setup_sqlmesh_controller(self.context_config, debug_console=console)
+        return DagsterSQLMeshController.setup(
+            self.context_config, debug_console=console
+        )
 
     def query(self, *args, **kwargs):
         conn = duckdb.connect(self.db_path)
@@ -99,21 +101,19 @@ class SQLMeshTestContext:
         *,
         environment: str,
         apply: bool = False,
-        execution_time: Optional[TimeLike] = None,
+        execution_time: t.Optional[TimeLike] = None,
         enable_debug_console: bool = False,
-        start: Optional[TimeLike] = None,
-        end: Optional[TimeLike] = None,
-        restate_models: Optional[List[str]] = None,
+        start: t.Optional[TimeLike] = None,
+        end: t.Optional[TimeLike] = None,
+        restate_models: t.Optional[t.List[str]] = None,
     ):
         controller = self.create_controller(enable_debug_console=enable_debug_console)
-        controller.add_event_handler(ConsoleRecorder())
-        plan_options: Dict[str, Any] = dict(
-            environment=environment,
+        recorder = ConsoleRecorder()
+        # controller.add_event_handler(ConsoleRecorder())
+        plan_options = PlanOptions(
             enable_preview=True,
         )
-        run_options: Dict[str, Any] = dict(
-            environment=environment,
-        )
+        run_options = RunOptions()
         if execution_time:
             plan_options["execution_time"] = execution_time
             run_options["execution_time"] = execution_time
@@ -126,19 +126,12 @@ class SQLMeshTestContext:
             plan_options["end"] = end
             run_options["end"] = end
 
-        builder = cast(
-            PlanBuilder,
-            controller.context.plan_builder(**plan_options),
-        )
-        if apply:
-            logger.debug("making plan")
-            plan = builder.build()
-            show_plan_summary(logger, plan, lambda x: x.is_model)
-            logger.debug("applying plan")
-            controller.context.apply(plan)
-            logger.debug("running through the scheduler")
-            controller.context.run(**run_options)
-        controller.context.close()
+        for _context, event in controller.plan_and_run(
+            environment,
+            plan_options=plan_options,
+            run_options=run_options,
+        ):
+            recorder(event)
 
 
 @pytest.fixture

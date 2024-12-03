@@ -221,6 +221,11 @@ class ShowRowDiff:
     skip_grain_check: bool = False
 
 
+@dataclass
+class ConsoleException:
+    exception: Exception
+
+
 ConsoleEvent = Union[
     StartPlanEvaluation,
     StopPlanEvaluation,
@@ -258,6 +263,7 @@ ConsoleEvent = Union[
     UpdateMigrationProgress,
     StopMigrationProgress,
     StartSnapshotMigrationProgress,
+    ConsoleException,
 ]
 
 ConsoleEventHandler = Callable[[ConsoleEvent], None]
@@ -406,9 +412,8 @@ class EventConsole(Console):
                     snapshot, self.categorizer(snapshot, plan_builder, default_catalog)
                 )
 
-        self.publish(
-            PlanEvent(plan_builder, auto_apply, default_catalog, no_diff, no_prompts)
-        )
+        if auto_apply:
+            plan_builder.apply()
 
     def log_test_results(
         self,
@@ -464,6 +469,9 @@ class EventConsole(Console):
 
     def remove_handler(self, handler_id: str):
         del self._handlers[handler_id]
+
+    def exception(self, exc: Exception):
+        self.publish(ConsoleException(exc))
 
 
 class DebugEventConsole(EventConsole):
