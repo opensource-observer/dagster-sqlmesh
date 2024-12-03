@@ -1,18 +1,15 @@
 import typing as t
 from dataclasses import dataclass, field
 from dagster import (
-    AssetDep,
-    multi_asset,
     AssetCheckResult,
     AssetMaterialization,
     AssetOut,
     AssetKey,
-    RetryPolicy,
 )
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 from sqlmesh.core.model import Model
 
-type MultiAssetResponse = t.Iterable[t.Union[AssetCheckResult, AssetMaterialization]]
+MultiAssetResponse = t.Iterable[t.Union[AssetCheckResult, AssetMaterialization]]
 
 
 @dataclass(kw_only=True)
