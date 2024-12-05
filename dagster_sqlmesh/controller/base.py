@@ -80,6 +80,149 @@ class SQLMeshModelDep:
         return parse_fqn(self.fqn)
 
 
+class SQLMeshInstance:
+    config: SQLMeshContextConfig
+    console: EventConsole
+    logger: logging.Logger
+    context: Context
+    environment: str
+
+    def __init__(
+        self,
+        environment: str,
+        console: EventConsole,
+        config: SQLMeshContextConfig,
+        context: Context,
+        logger: logging.Logger,
+    ):
+        self.environment = environment
+        self.console = console
+        self.config = config
+        self.context = context
+        self.logger = logger
+
+    @contextmanager
+    def console_context(self, handler: ConsoleEventHandler):
+        id = self.console.add_handler(handler)
+        yield
+        self.console.remove_handler(id)
+
+    def plan(
+        self,
+        categorizer: t.Optional[SnapshotCategorizer] = None,
+        default_catalog: t.Optional[str] = None,
+        **plan_options: t.Unpack[PlanOptions],
+    ):
+        context = self.context
+
+        # Runs things in thread
+        def run_sqlmesh_thread(
+            logger: logging.Logger,
+            context: Context,
+            controller: SQLMeshController,
+            environment: str,
+            plan_options: PlanOptions,
+            default_catalog: str,
+        ):
+            try:
+                builder = t.cast(
+                    PlanBuilder,
+                    context.plan_builder(
+                        environment=environment,
+                        **plan_options,
+                    ),
+                )
+                logger.debug("dagster-sqlmesh: plan")
+                controller.console.plan(
+                    builder,
+                    auto_apply=True,
+                    default_catalog=default_catalog,
+                )
+            except Exception as e:
+                controller.console.exception(e)
+
+        generator = ConsoleGenerator(self.logger)
+        with self.console_context(generator):
+            thread = threading.Thread(
+                target=run_sqlmesh_thread,
+                args=(
+                    self.logger,
+                    context,
+                    self,
+                    self.environment,
+                    plan_options,
+                    default_catalog,
+                ),
+            )
+            thread.start()
+
+            for event in generator.events(thread):
+                match event:
+                    case ConsoleException(e):
+                        raise e
+                    case _:
+                        yield event
+
+            thread.join()
+
+    def run(self, **run_options: t.Unpack[RunOptions]):
+        # Runs things in thread
+        def run_sqlmesh_thread(
+            logger: logging.Logger,
+            context: Context,
+            controller: SQLMeshController,
+            environment: str,
+            run_options: RunOptions,
+        ):
+            logger.debug("dagster-sqlmesh: run")
+            try:
+                context.run(environment=environment, **run_options)
+            except Exception as e:
+                controller.console.exception(e)
+
+        generator = ConsoleGenerator(self.logger)
+        with self.console_context(generator):
+            thread = threading.Thread(
+                target=run_sqlmesh_thread,
+                args=(
+                    self.logger,
+                    self.context,
+                    self,
+                    self.environment,
+                    run_options or {},
+                ),
+            )
+            thread.start()
+
+            for event in generator.events(thread):
+                match event:
+                    case ConsoleException(e):
+                        raise e
+                    case _:
+                        yield event
+
+            thread.join()
+
+    def plan_and_run(
+        self,
+        categorizer: t.Optional[SnapshotCategorizer] = None,
+        default_catalog: t.Optional[str] = None,
+        plan_options: t.Optional[PlanOptions] = None,
+        run_options: t.Optional[RunOptions] = None,
+    ):
+        run_options = run_options or {}
+        plan_options = plan_options or {}
+
+        yield from self.plan(categorizer, default_catalog, **plan_options)
+        yield from self.run(**run_options)
+
+    def models(self):
+        return self.context.models
+
+    def models_dag(self):
+        return self.context.dag
+
+
 class SQLMeshController:
     """Allows control of sqlmesh via a python interface. It is not suggested to
     use the constructor of this class directly, but instead use the provided
@@ -109,6 +252,7 @@ class SQLMeshController:
         self.config = config
         self.console = console
         self.logger = logger
+        self._context_open = False
 
     def set_logger(self, logger: logging.Logger):
         self.logger = logger
@@ -118,14 +262,6 @@ class SQLMeshController:
 
     def remove_event_handler(self, handler_id: str):
         return self.console.remove_handler(handler_id)
-
-    def models_dag(self):
-        with self.context() as context:
-            return context.dag
-
-    def models(self):
-        with self.context() as context:
-            return context.models
 
     def _create_context(self):
         options: t.Dict[str, t.Any] = dict(
@@ -138,136 +274,37 @@ class SQLMeshController:
         return Context(**options)
 
     @contextmanager
-    def context(self):
+    def instance(self, environment: str):
+        if self._context_open:
+            raise Exception("Only one sqlmesh instance at a time")
+
         context = self._create_context()
-        yield context
-        context.close()
-
-    def plan(
-        self,
-        environment: str,
-        categorizer: t.Optional[SnapshotCategorizer] = None,
-        default_catalog: t.Optional[str] = None,
-        **plan_options: t.Unpack[PlanOptions],
-    ):
-        with self.context() as context:
-            return self._plan(
-                context, environment, categorizer, default_catalog, plan_options
+        self._context_open = True
+        try:
+            yield SQLMeshInstance(
+                environment, self.console, self.config, context, self.logger
             )
-
-    def _plan(
-        self,
-        context: Context,
-        environment: str,
-        categorizer: t.Optional[SnapshotCategorizer],
-        default_catalog: t.Optional[str],
-        plan_options: PlanOptions,
-    ):
-        # Runs things in thread
-        def run_sqlmesh_thread(
-            logger: logging.Logger,
-            context: Context,
-            controller: SQLMeshController,
-            environment: str,
-            plan_options: PlanOptions,
-            default_catalog: str,
-        ):
-            try:
-                builder = t.cast(
-                    PlanBuilder,
-                    context.plan_builder(
-                        environment=environment,
-                        **plan_options,
-                    ),
-                )
-                logger.debug("dagster-sqlmesh: plan")
-                controller.console.plan(
-                    builder,
-                    auto_apply=True,
-                    default_catalog=default_catalog,
-                )
-            except Exception as e:
-                controller.console.exception(e)
-
-        generator = ConsoleGenerator(self.logger)
-        event_id = self.add_event_handler(generator)
-
-        thread = threading.Thread(
-            target=run_sqlmesh_thread,
-            args=(
-                self.logger,
-                context,
-                self,
-                environment,
-                plan_options,
-                default_catalog,
-            ),
-        )
-        thread.start()
-
-        for event in generator.events(thread):
-            match event:
-                case ConsoleException(e):
-                    raise e
-                case _:
-                    yield (context, event)
-
-        thread.join()
-
-        self.remove_event_handler(event_id)
+        finally:
+            self._context_open = False
+            context.close()
 
     def run(
         self,
         environment: str,
         **run_options: t.Unpack[RunOptions],
     ):
-        with self.context() as context:
-            return self._run(context, environment, run_options=run_options)
+        with self.instance(environment) as mesh:
+            yield from mesh.run(**run_options)
 
-    def _run(
+    def plan(
         self,
-        context: Context,
         environment: str,
-        run_options: RunOptions,
+        categorizer: t.Optional[SnapshotCategorizer],
+        default_catalog: t.Optional[str],
+        plan_options: PlanOptions,
     ):
-        # Runs things in thread
-        def run_sqlmesh_thread(
-            logger: logging.Logger,
-            context: Context,
-            controller: SQLMeshController,
-            environment: str,
-            run_options: RunOptions,
-        ):
-            logger.debug("dagster-sqlmesh: run")
-            try:
-                context.run(environment=environment, **run_options)
-            except Exception as e:
-                controller.console.exception(e)
-
-        generator = ConsoleGenerator(self.logger)
-        event_id = self.add_event_handler(generator)
-
-        thread = threading.Thread(
-            target=run_sqlmesh_thread,
-            args=(
-                self.logger,
-                context,
-                self,
-                environment,
-                run_options or {},
-            ),
-        )
-        thread.start()
-
-        for event in generator.events(thread):
-            match event:
-                case ConsoleException(e):
-                    raise e
-                case _:
-                    yield (context, event)
-
-        thread.join()
-        self.remove_event_handler(event_id)
+        with self.instance(environment) as mesh:
+            yield from mesh.plan(categorizer, default_catalog, **plan_options)
 
     def plan_and_run(
         self,
@@ -277,17 +314,10 @@ class SQLMeshController:
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
     ):
-        with self.context() as context:
-            yield from self._plan(
-                context,
-                environment=environment,
+        with self.instance(environment) as mesh:
+            yield from mesh.plan_and_run(
                 categorizer=categorizer,
                 default_catalog=default_catalog,
-                plan_options=plan_options or {},
-            )
-
-            yield from self._run(
-                context,
-                environment=environment,
-                run_options=run_options or {},
+                plan_options=plan_options,
+                run_options=run_options,
             )
