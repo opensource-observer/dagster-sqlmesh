@@ -228,29 +228,32 @@ class SQLMeshResource(ConfigurableResource):
         logger = context.log
 
         controller = self.get_controller(logger)
-        dag = controller.models_dag()
+        with controller.instance(environment) as mesh:
+            dag = mesh.models_dag()
 
-        plan_options["select_models"] = []
+            plan_options["select_models"] = []
 
-        models = controller.models()
-        models_map = models.copy()
-        if context.selected_output_names:
-            models_map = {}
-            for key, model in models.items():
-                if (
-                    sqlmesh_model_name_to_key(model.name)
-                    in context.selected_output_names
-                ):
-                    models_map[key] = model
+            models = mesh.models()
+            models_map = models.copy()
+            if context.selected_output_names:
+                models_map = {}
+                for key, model in models.items():
+                    if (
+                        sqlmesh_model_name_to_key(model.name)
+                        in context.selected_output_names
+                    ):
+                        models_map[key] = model
 
-        event_handler = DagsterSQLMeshEventHandler(
-            context, models_map, dag, "sqlmesh: "
-        )
+            event_handler = DagsterSQLMeshEventHandler(
+                context, models_map, dag, "sqlmesh: "
+            )
 
-        for sqlmesh_context, event in controller.plan_and_run(
-            environment=environment, plan_options=plan_options, run_options=run_options
-        ):
-            yield from event_handler.process_events(sqlmesh_context, event)
+            for event in controller.plan_and_run(
+                environment=environment,
+                plan_options=plan_options,
+                run_options=run_options,
+            ):
+                yield from event_handler.process_events(mesh.context, event)
 
     def get_controller(self, log_override: t.Optional[logging.Logger] = None):
         return SQLMeshController.setup(self.config, log_override=log_override)
