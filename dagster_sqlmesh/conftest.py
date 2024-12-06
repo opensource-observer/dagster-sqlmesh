@@ -51,6 +51,8 @@ def sample_sqlmesh_project():
 
 @dataclass
 class SQLMeshTestContext:
+    """A test context for running SQLMesh"""
+
     db_path: str
     context_config: SQLMeshContextConfig
 
@@ -96,17 +98,33 @@ class SQLMeshTestContext:
         """
         )
 
-    def run(
+    def plan_and_run(
         self,
         *,
         environment: str,
-        apply: bool = False,
         execution_time: t.Optional[TimeLike] = None,
         enable_debug_console: bool = False,
         start: t.Optional[TimeLike] = None,
         end: t.Optional[TimeLike] = None,
         restate_models: t.Optional[t.List[str]] = None,
     ):
+        """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
+
+        Args:
+            environment (str): The environment to run SQLMesh in.
+            execution_time (TimeLike, optional): The execution timestamp for the run. Defaults to None.
+            enable_debug_console (bool, optional): Flag to enable debug console. Defaults to False.
+            start (TimeLike, optional): Start time for the run interval. Defaults to None.
+            end (TimeLike, optional): End time for the run interval. Defaults to None.
+            restate_models (List[str], optional): List of models to restate. Defaults to None.
+
+        Returns:
+            None: The function records events to a debug console but doesn't return anything.
+
+        Note:
+            TimeLike can be any time-like object that SQLMesh accepts (datetime, str, etc.).
+            The function creates a controller and recorder to capture all SQLMesh events during execution.
+        """
         controller = self.create_controller(enable_debug_console=enable_debug_console)
         recorder = ConsoleRecorder()
         # controller.add_event_handler(ConsoleRecorder())

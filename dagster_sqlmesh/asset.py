@@ -6,7 +6,7 @@ from dagster import (
     RetryPolicy,
 )
 
-from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
+from dagster_sqlmesh.controller import DagsterSQLMeshController
 from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
 
 from .config import SQLMeshContextConfig
@@ -26,7 +26,7 @@ def sqlmesh_assets(
     required_resource_keys: t.Optional[t.Set[str]] = None,
     retry_policy: t.Optional[RetryPolicy] = None,
 ):
-    controller = DagsterSQLMeshController.setup(config)
+    controller = DagsterSQLMeshController.setup_with_config(config)
     if not dagster_sqlmesh_translator:
         dagster_sqlmesh_translator = SQLMeshDagsterTranslator()
     conversion = controller.to_asset_outs(environment, dagster_sqlmesh_translator)

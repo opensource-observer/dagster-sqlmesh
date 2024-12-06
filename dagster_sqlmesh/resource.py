@@ -13,7 +13,7 @@ from sqlmesh.core.context import Context as SQLMeshContext
 
 from .utils import sqlmesh_model_name_to_key
 from .config import SQLMeshContextConfig
-from .controller.base import SQLMeshController, PlanOptions, RunOptions
+from .controller import SQLMeshController, PlanOptions, RunOptions
 from . import console
 
 

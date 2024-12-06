@@ -274,6 +274,18 @@ SnapshotCategorizer = t.Callable[
 
 
 class EventConsole(Console):
+    """
+    A console implementation that manages and publishes events related to
+    SQLMesh operations. The sqlmesh console implementation is mostly for it's
+    CLI application and doesn't take into account using sqlmesh as a library.
+    This event pub/sub interface allows us to capture events and choose how we
+    wish to handle it with N number of handlers.
+
+    This class extends the Console class and provides functionality to handle
+    various events during SQLMesh processes such as plan evaluation, creation,
+    promotion, migration, and testing.
+    """
+
     categorizer: t.Optional[SnapshotCategorizer] = None
 
     def __init__(self, log_override: t.Optional[logging.Logger] = None):
@@ -475,6 +487,8 @@ class EventConsole(Console):
 
 
 class DebugEventConsole(EventConsole):
+    """A console that wraps an existing console and logs all events to a logger"""
+
     def __init__(self, console: Console):
         super().__init__()
         self._console = console

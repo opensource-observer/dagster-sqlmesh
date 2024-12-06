@@ -28,7 +28,7 @@ from dagster_sqlmesh import sqlmesh_assets, SQLMeshContextConfig, SQLMeshResourc
 
 sqlmesh_config = SQLMeshContextConfig(path="/home/foo/sqlmesh_project", gateway="name-of-your-gateway")
 
-@sqlmesh_assets(config=sqlmesh_config)
+@sqlmesh_assets(environment="dev", config=sqlmesh_config)
 def sqlmesh_project(context: AssetExecutionContext, sqlmesh: SQLMeshResource):
     yield from sqlmesh.run(context)
 

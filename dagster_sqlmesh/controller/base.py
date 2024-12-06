@@ -81,6 +81,24 @@ class SQLMeshModelDep:
 
 
 class SQLMeshInstance:
+    """
+    A class that manages sqlmesh operations and context within a specific
+    environment. This class will run sqlmesh in a separate thread.
+
+    This class provides an interface to plan, run, and manage sqlmesh operations
+    with proper console event handling and threading support.
+
+    This class should not be instantiated directly, but instead should be
+    created via the `SQLMeshController.instance` method.
+
+    Attributes:
+        config (SQLMeshContextConfig): Configuration settings for sqlmesh
+        context. console (EventConsole): Console handler for event management.
+        logger (logging.Logger): Logger instance for debug and error messages.
+        context (Context): sqlmesh context instance. environment (str): Target
+        environment name.
+    """
+
     config: SQLMeshContextConfig
     console: EventConsole
     logger: logging.Logger
@@ -113,6 +131,28 @@ class SQLMeshInstance:
         default_catalog: t.Optional[str] = None,
         **plan_options: t.Unpack[PlanOptions],
     ):
+        """
+        Executes a sqlmesh plan operation in a separate thread and yields
+        console events.
+
+        This method creates a plan for sqlmesh operations, runs it in a separate
+        thread, and provides real-time console output through a generator.
+
+        Args:
+            categorizer (Optional[SnapshotCategorizer]): Categorizer for
+                snapshots. Defaults to None.
+            default_catalog (Optional[str]): Default catalog to use for the
+                plan. Defaults to None.
+            **plan_options (**PlanOptions): Additional options for plan
+                execution.
+
+        Yields:
+            ConsoleEvent: Console events generated during plan execution.
+
+        Raises:
+            ConsoleException: If an error occurs during plan execution.
+        """
+
         context = self.context
 
         # Runs things in thread
@@ -142,6 +182,10 @@ class SQLMeshInstance:
                 controller.console.exception(e)
 
         generator = ConsoleGenerator(self.logger)
+
+        if categorizer:
+            self.console.add_snapshot_categorizer(categorizer)
+
         with self.console_context(generator):
             thread = threading.Thread(
                 target=run_sqlmesh_thread,
@@ -166,6 +210,26 @@ class SQLMeshInstance:
             thread.join()
 
     def run(self, **run_options: t.Unpack[RunOptions]):
+        """Executes sqlmesh run in a separate thread with console output.
+
+        This method executes SQLMesh operations in a dedicated thread while
+        capturing and yielding console events. It handles both successful
+        execution and exceptions that might occur during the run.
+
+        Args:
+            **run_options (**RunOptions): Additional run options. See the
+                RunOptions type.
+
+        Yields:
+            ConsoleEvent: Various console events generated during the sqlmesh
+                run, including logs, progress updates, and potential
+                exceptions.
+
+        Raises:
+            Exception: Re-raises any exception caught during the sqlmesh run in
+            the main thread.
+        """
+
         # Runs things in thread
         def run_sqlmesh_thread(
             logger: logging.Logger,
@@ -226,7 +290,34 @@ class SQLMeshInstance:
 class SQLMeshController:
     """Allows control of sqlmesh via a python interface. It is not suggested to
     use the constructor of this class directly, but instead use the provided
-    `setup` class method"""
+    `setup` or `setup_with_config` class methods.
+
+    Attributes:
+        config (SQLMeshContextConfig): Configuration settings for sqlmesh
+        console (EventConsole): Console handler for event management. logger
+        (logging.Logger): Logger instance for debug and error messages.
+
+    Examples:
+
+    To run create a controller for a project located in `path/to/sqlmesh`:
+
+        >>> controller = SQLMeshController.setup("path/to/sqlmesh")
+
+    The controller itself does not represent a running sqlmesh instance. This
+    ensures that the controller does not maintain a connection unnecessarily to
+    any database. However, when you need to call sqlmesh operations you will
+    need to instantiate an instance. To do so, the `instance` method provides a
+    context manager for an instance so that any connections are properly closed.
+    At this time, only a single instance is allowed to exist at a time and is
+    enforced by the `instance()` method.
+
+    To then use the controller to run a plan and run operation in the `dev`
+    environment you would do this:
+
+        >>> with controller.instance("dev") as mesh:
+        >>>     for event in mesh.plan_and_run():
+        >>>         print(event)
+    """
 
     config: SQLMeshContextConfig
     console: EventConsole
@@ -234,6 +325,20 @@ class SQLMeshController:
 
     @classmethod
     def setup(
+        cls,
+        path: str,
+        gateway: str = "local",
+        debug_console: t.Optional[Console] = None,
+        log_override: t.Optional[logging.Logger] = None,
+    ):
+        return cls.setup_with_config(
+            config=SQLMeshContextConfig(path=path, gateway=gateway),
+            debug_console=debug_console,
+            log_override=log_override,
+        )
+
+    @classmethod
+    def setup_with_config(
         cls,
         config: SQLMeshContextConfig,
         debug_console: t.Optional[Console] = None,
