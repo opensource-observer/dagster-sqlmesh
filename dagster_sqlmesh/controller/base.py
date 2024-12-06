@@ -80,89 +80,81 @@ class SQLMeshModelDep:
         return parse_fqn(self.fqn)
 
 
-class SQLMeshController:
-    """Allows control of sqlmesh via a python interface. It is not suggested to
-    use the constructor of this class directly, but instead use the provided
-    `setup` class method"""
+class SQLMeshInstance:
+    """
+    A class that manages sqlmesh operations and context within a specific
+    environment. This class will run sqlmesh in a separate thread.
+
+    This class provides an interface to plan, run, and manage sqlmesh operations
+    with proper console event handling and threading support.
+
+    This class should not be instantiated directly, but instead should be
+    created via the `SQLMeshController.instance` method.
+
+    Attributes:
+        config (SQLMeshContextConfig): Configuration settings for sqlmesh
+        context. console (EventConsole): Console handler for event management.
+        logger (logging.Logger): Logger instance for debug and error messages.
+        context (Context): sqlmesh context instance. environment (str): Target
+        environment name.
+    """
 
     config: SQLMeshContextConfig
     console: EventConsole
     logger: logging.Logger
+    context: Context
+    environment: str
 
-    @classmethod
-    def setup(
-        cls,
+    def __init__(
+        self,
+        environment: str,
+        console: EventConsole,
         config: SQLMeshContextConfig,
-        debug_console: t.Optional[Console] = None,
-        log_override: t.Optional[logging.Logger] = None,
+        context: Context,
+        logger: logging.Logger,
     ):
-        console = EventConsole(log_override=log_override)
-        if debug_console:
-            console = DebugEventConsole(debug_console)
-        controller = cls(
-            console=console,
-            config=config,
-        )
-        return controller
-
-    def __init__(self, config: SQLMeshContextConfig, console: EventConsole):
-        self.config = config
+        self.environment = environment
         self.console = console
+        self.config = config
+        self.context = context
         self.logger = logger
-
-    def set_logger(self, logger: logging.Logger):
-        self.logger = logger
-
-    def add_event_handler(self, handler: ConsoleEventHandler):
-        return self.console.add_handler(handler)
-
-    def remove_event_handler(self, handler_id: str):
-        return self.console.remove_handler(handler_id)
-
-    def models_dag(self):
-        with self.context() as context:
-            return context.dag
-
-    def models(self):
-        with self.context() as context:
-            return context.models
-
-    def _create_context(self):
-        options: t.Dict[str, t.Any] = dict(
-            paths=self.config.path,
-            gateway=self.config.gateway,
-            console=self.console,
-        )
-        if self.config.sqlmesh_config:
-            options["config"] = self.config.sqlmesh_config
-        return Context(**options)
 
     @contextmanager
-    def context(self):
-        context = self._create_context()
-        yield context
-        context.close()
+    def console_context(self, handler: ConsoleEventHandler):
+        id = self.console.add_handler(handler)
+        yield
+        self.console.remove_handler(id)
 
     def plan(
         self,
-        environment: str,
         categorizer: t.Optional[SnapshotCategorizer] = None,
         default_catalog: t.Optional[str] = None,
         **plan_options: t.Unpack[PlanOptions],
     ):
-        with self.context() as context:
-            return self._plan(
-                context, environment, categorizer, default_catalog, plan_options
-            )
+        """
+        Executes a sqlmesh plan operation in a separate thread and yields
+        console events.
 
-    def _plan(
-        self,
-        context: Context,
-        environment: str,
-        categorizer: t.Optional[SnapshotCategorizer],
-        default_catalog: t.Optional[str],
-        plan_options: PlanOptions,
-    ):
+        This method creates a plan for sqlmesh operations, runs it in a separate
+        thread, and provides real-time console output through a generator.
+
+        Args:
+            categorizer (Optional[SnapshotCategorizer]): Categorizer for
+                snapshots. Defaults to None.
+            default_catalog (Optional[str]): Default catalog to use for the
+                plan. Defaults to None.
+            **plan_options (**PlanOptions): Additional options for plan
+                execution.
+
+        Yields:
+            ConsoleEvent: Console events generated during plan execution.
+
+        Raises:
+            ConsoleException: If an error occurs during plan execution.
+        """
+
+        context = self.context
+
         # Runs things in thread
         def run_sqlmesh_thread(
             logger: logging.Logger,
@@ -190,46 +182,54 @@ class SQLMeshController:
                 controller.console.exception(e)
 
         generator = ConsoleGenerator(self.logger)
-        event_id = self.add_event_handler(generator)
 
-        thread = threading.Thread(
-            target=run_sqlmesh_thread,
-            args=(
-                self.logger,
-                context,
-                self,
-                environment,
-                plan_options,
-                default_catalog,
-            ),
-        )
-        thread.start()
+        if categorizer:
+            self.console.add_snapshot_categorizer(categorizer)
 
-        for event in generator.events(thread):
-            match event:
-                case ConsoleException(e):
-                    raise e
-                case _:
-                    yield (context, event)
+        with self.console_context(generator):
+            thread = threading.Thread(
+                target=run_sqlmesh_thread,
+                args=(
+                    self.logger,
+                    context,
+                    self,
+                    self.environment,
+                    plan_options,
+                    default_catalog,
+                ),
+            )
+            thread.start()
 
-        thread.join()
+            for event in generator.events(thread):
+                match event:
+                    case ConsoleException(e):
+                        raise e
+                    case _:
+                        yield event
 
-        self.remove_event_handler(event_id)
+            thread.join()
 
-    def run(
-        self,
-        environment: str,
-        **run_options: t.Unpack[RunOptions],
-    ):
-        with self.context() as context:
-            return self._run(context, environment, run_options=run_options)
+    def run(self, **run_options: t.Unpack[RunOptions]):
+        """Executes sqlmesh run in a separate thread with console output.
 
-    def _run(
-        self,
-        context: Context,
-        environment: str,
-        run_options: RunOptions,
-    ):
+        This method executes SQLMesh operations in a dedicated thread while
+        capturing and yielding console events. It handles both successful
+        execution and exceptions that might occur during the run.
+
+        Args:
+            **run_options (**RunOptions): Additional run options. See the
+                RunOptions type.
+
+        Yields:
+            ConsoleEvent: Various console events generated during the sqlmesh
+                run, including logs, progress updates, and potential
+                exceptions.
+
+        Raises:
+            Exception: Re-raises any exception caught during the sqlmesh run in
+            the main thread.
+        """
+
         # Runs things in thread
         def run_sqlmesh_thread(
             logger: logging.Logger,
@@ -245,29 +245,171 @@ class SQLMeshController:
                 controller.console.exception(e)
 
         generator = ConsoleGenerator(self.logger)
-        event_id = self.add_event_handler(generator)
+        with self.console_context(generator):
+            thread = threading.Thread(
+                target=run_sqlmesh_thread,
+                args=(
+                    self.logger,
+                    self.context,
+                    self,
+                    self.environment,
+                    run_options or {},
+                ),
+            )
+            thread.start()
 
-        thread = threading.Thread(
-            target=run_sqlmesh_thread,
-            args=(
-                self.logger,
-                context,
-                self,
-                environment,
-                run_options or {},
-            ),
+            for event in generator.events(thread):
+                match event:
+                    case ConsoleException(e):
+                        raise e
+                    case _:
+                        yield event
+
+            thread.join()
+
+    def plan_and_run(
+        self,
+        categorizer: t.Optional[SnapshotCategorizer] = None,
+        default_catalog: t.Optional[str] = None,
+        plan_options: t.Optional[PlanOptions] = None,
+        run_options: t.Optional[RunOptions] = None,
+    ):
+        run_options = run_options or {}
+        plan_options = plan_options or {}
+
+        yield from self.plan(categorizer, default_catalog, **plan_options)
+        yield from self.run(**run_options)
+
+    def models(self):
+        return self.context.models
+
+    def models_dag(self):
+        return self.context.dag
+
+
+class SQLMeshController:
+    """Allows control of sqlmesh via a python interface. It is not suggested to
+    use the constructor of this class directly, but instead use the provided
+    `setup` or `setup_with_config` class methods.
+
+    Attributes:
+        config (SQLMeshContextConfig): Configuration settings for sqlmesh
+        console (EventConsole): Console handler for event management. logger
+        (logging.Logger): Logger instance for debug and error messages.
+
+    Examples:
+
+    To run create a controller for a project located in `path/to/sqlmesh`:
+
+        >>> controller = SQLMeshController.setup("path/to/sqlmesh")
+
+    The controller itself does not represent a running sqlmesh instance. This
+    ensures that the controller does not maintain a connection unnecessarily to
+    any database. However, when you need to call sqlmesh operations you will
+    need to instantiate an instance. To do so, the `instance` method provides a
+    context manager for an instance so that any connections are properly closed.
+    At this time, only a single instance is allowed to exist at a time and is
+    enforced by the `instance()` method.
+
+    To then use the controller to run a plan and run operation in the `dev`
+    environment you would do this:
+
+        >>> with controller.instance("dev") as mesh:
+        >>>     for event in mesh.plan_and_run():
+        >>>         print(event)
+    """
+
+    config: SQLMeshContextConfig
+    console: EventConsole
+    logger: logging.Logger
+
+    @classmethod
+    def setup(
+        cls,
+        path: str,
+        gateway: str = "local",
+        debug_console: t.Optional[Console] = None,
+        log_override: t.Optional[logging.Logger] = None,
+    ):
+        return cls.setup_with_config(
+            config=SQLMeshContextConfig(path=path, gateway=gateway),
+            debug_console=debug_console,
+            log_override=log_override,
         )
-        thread.start()
 
-        for event in generator.events(thread):
-            match event:
-                case ConsoleException(e):
-                    raise e
-                case _:
-                    yield (context, event)
+    @classmethod
+    def setup_with_config(
+        cls,
+        config: SQLMeshContextConfig,
+        debug_console: t.Optional[Console] = None,
+        log_override: t.Optional[logging.Logger] = None,
+    ):
+        console = EventConsole(log_override=log_override)
+        if debug_console:
+            console = DebugEventConsole(debug_console)
+        controller = cls(
+            console=console,
+            config=config,
+        )
+        return controller
 
-        thread.join()
-        self.remove_event_handler(event_id)
+    def __init__(self, config: SQLMeshContextConfig, console: EventConsole):
+        self.config = config
+        self.console = console
+        self.logger = logger
+        self._context_open = False
+
+    def set_logger(self, logger: logging.Logger):
+        self.logger = logger
+
+    def add_event_handler(self, handler: ConsoleEventHandler):
+        return self.console.add_handler(handler)
+
+    def remove_event_handler(self, handler_id: str):
+        return self.console.remove_handler(handler_id)
+
+    def _create_context(self):
+        options: t.Dict[str, t.Any] = dict(
+            paths=self.config.path,
+            gateway=self.config.gateway,
+            console=self.console,
+        )
+        if self.config.sqlmesh_config:
+            options["config"] = self.config.sqlmesh_config
+        return Context(**options)
+
+    @contextmanager
+    def instance(self, environment: str):
+        if self._context_open:
+            raise Exception("Only one sqlmesh instance at a time")
+
+        context = self._create_context()
+        self._context_open = True
+        try:
+            yield SQLMeshInstance(
+                environment, self.console, self.config, context, self.logger
+            )
+        finally:
+            self._context_open = False
+            context.close()
+
+    def run(
+        self,
+        environment: str,
+        **run_options: t.Unpack[RunOptions],
+    ):
+        with self.instance(environment) as mesh:
+            yield from mesh.run(**run_options)
+
+    def plan(
+        self,
+        environment: str,
+        categorizer: t.Optional[SnapshotCategorizer],
+        default_catalog: t.Optional[str],
+        plan_options: PlanOptions,
+    ):
+        with self.instance(environment) as mesh:
+            yield from mesh.plan(categorizer, default_catalog, **plan_options)
 
     def plan_and_run(
         self,
@@ -277,17 +419,10 @@ class SQLMeshController:
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
     ):
-        with self.context() as context:
-            yield from self._plan(
-                context,
-                environment=environment,
+        with self.instance(environment) as mesh:
+            yield from mesh.plan_and_run(
                 categorizer=categorizer,
                 default_catalog=default_catalog,
-                plan_options=plan_options or {},
-            )
-
-            yield from self._run(
-                context,
-                environment=environment,
-                run_options=run_options or {},
+                plan_options=plan_options,
+                run_options=run_options,
             )

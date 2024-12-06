@@ -7,9 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
-    sample_sqlmesh_test_context.run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
-        apply=True,
     )
 
     staging_model_count = sample_sqlmesh_test_context.query(
@@ -22,12 +21,11 @@ def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
 
 def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     logger.debug("SQLMESH MATERIALIZATION 1")
-    sample_sqlmesh_test_context.run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
         start="2023-01-01",
         end="2024-01-01",
         execution_time="2024-01-02",
-        apply=True,
     )
 
     staging_model_count = sample_sqlmesh_test_context.query(
@@ -38,11 +36,10 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     assert staging_model_count[0][0] == 5
 
     logger.debug("SQLMESH MATERIALIZATION 2")
-    sample_sqlmesh_test_context.run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
         start="2024-01-01",
         end="2024-07-07",
-        apply=True,
         execution_time="2024-07-08",
     )
 
@@ -69,9 +66,8 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
         )
     )
     logger.debug("SQLMESH MATERIALIZATION 3")
-    sample_sqlmesh_test_context.run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
-        apply=True,
         end="2024-07-10",
         execution_time="2024-07-10",
         # restate_models=["sqlmesh_example.staging_model_3"],
@@ -92,9 +88,8 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     assert test_source_model_count[0][0] == 5
 
     logger.debug("SQLMESH MATERIALIZATION 4 - should be no changes")
-    sample_sqlmesh_test_context.run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
-        apply=True,
         end="2024-07-10",
         execution_time="2024-07-10",
     )
@@ -108,9 +103,8 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
             }
         )
     )
-    sample_sqlmesh_test_context.run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
-        apply=True,
         # restate_models=["sqlmesh_example.staging_model_3"],
     )
 

@@ -20,9 +20,10 @@ class DagsterSQLMeshController(SQLMeshController):
     """An extension of the sqlmesh controller specifically for dagster use"""
 
     def to_asset_outs(
-        self, translator: SQLMeshDagsterTranslator
+        self, environment: str, translator: SQLMeshDagsterTranslator
     ) -> SQLMeshMultiAssetOptions:
-        with self.context() as context:
+        with self.instance(environment) as instance:
+            context = instance.context
             dag = context.dag
             output = SQLMeshMultiAssetOptions()
             depsMap: t.Dict[str, CoercibleToAssetDep] = {}
