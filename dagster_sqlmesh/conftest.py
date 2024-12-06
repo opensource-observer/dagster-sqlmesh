@@ -126,7 +126,7 @@ class SQLMeshTestContext:
             plan_options["end"] = end
             run_options["end"] = end
 
-        for _context, event in controller.plan_and_run(
+        for event in controller.plan_and_run(
             environment,
             plan_options=plan_options,
             run_options=run_options,

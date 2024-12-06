@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Define a SQLMesh Asset
 def sqlmesh_assets(
     *,
+    environment: str,
     config: SQLMeshContextConfig,
     name: t.Optional[str] = None,
     dagster_sqlmesh_translator: t.Optional[SQLMeshDagsterTranslator] = None,
@@ -28,7 +29,7 @@ def sqlmesh_assets(
     controller = DagsterSQLMeshController.setup(config)
     if not dagster_sqlmesh_translator:
         dagster_sqlmesh_translator = SQLMeshDagsterTranslator()
-    conversion = controller.to_asset_outs(dagster_sqlmesh_translator)
+    conversion = controller.to_asset_outs(environment, dagster_sqlmesh_translator)
 
     return multi_asset(
         name=name,

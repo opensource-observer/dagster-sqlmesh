@@ -50,7 +50,7 @@ def test_source() -> pl.DataFrame:
     )
 
 
-@sqlmesh_assets(config=sqlmesh_config)
+@sqlmesh_assets(environment="dev", config=sqlmesh_config)
 def sqlmesh_project(context: AssetExecutionContext, sqlmesh: SQLMeshResource):
     yield from sqlmesh.run(context)
 
