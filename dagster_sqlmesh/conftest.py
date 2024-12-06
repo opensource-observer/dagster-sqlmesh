@@ -60,7 +60,7 @@ class SQLMeshTestContext:
         console = None
         if enable_debug_console:
             console = get_console()
-        return DagsterSQLMeshController.setup(
+        return DagsterSQLMeshController.setup_with_config(
             self.context_config, debug_console=console
         )
 
