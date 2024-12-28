@@ -6,6 +6,7 @@ from dagster import (
     asset,
     AssetExecutionContext,
     Definitions,
+    define_asset_job,
 )
 from dagster_duckdb_polars import DuckDBPolarsIOManager
 import polars as pl
@@ -55,6 +56,8 @@ def sqlmesh_project(context: AssetExecutionContext, sqlmesh: SQLMeshResource):
     yield from sqlmesh.run(context)
 
 
+all_assets_job = define_asset_job(name="all_assets_job")
+
 defs = Definitions(
     assets=[sqlmesh_project, test_source, reset_asset],
     resources={
@@ -64,4 +67,5 @@ defs = Definitions(
             schema="sources",
         ),
     },
+    jobs=[all_assets_job],
 )

@@ -248,12 +248,13 @@ class SQLMeshResource(ConfigurableResource):
                 context, models_map, dag, "sqlmesh: "
             )
 
-            for event in controller.plan_and_run(
-                environment=environment,
+            for event in mesh.plan_and_run(
                 plan_options=plan_options,
                 run_options=run_options,
             ):
                 yield from event_handler.process_events(mesh.context, event)
 
     def get_controller(self, log_override: t.Optional[logging.Logger] = None):
-        return SQLMeshController.setup(self.config, log_override=log_override)
+        return SQLMeshController.setup_with_config(
+            self.config, log_override=log_override
+        )

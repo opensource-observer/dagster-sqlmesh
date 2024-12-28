@@ -350,13 +350,19 @@ class SQLMeshController:
         controller = cls(
             console=console,
             config=config,
+            log_override=log_override,
         )
         return controller
 
-    def __init__(self, config: SQLMeshContextConfig, console: EventConsole):
+    def __init__(
+        self,
+        config: SQLMeshContextConfig,
+        console: EventConsole,
+        log_override: t.Optional[logging.Logger] = None,
+    ):
         self.config = config
         self.console = console
-        self.logger = logger
+        self.logger = log_override or logger
         self._context_open = False
 
     def set_logger(self, logger: logging.Logger):
@@ -379,7 +385,10 @@ class SQLMeshController:
         return Context(**options)
 
     @contextmanager
-    def instance(self, environment: str):
+    def instance(self, environment: str, component: str = "unknown"):
+        self.logger.info(
+            f"Opening sqlmesh instance for env={environment} component={component}"
+        )
         if self._context_open:
             raise Exception("Only one sqlmesh instance at a time")
 
@@ -390,6 +399,9 @@ class SQLMeshController:
                 environment, self.console, self.config, context, self.logger
             )
         finally:
+            self.logger.info(
+                f"Closing sqlmesh instance for env={environment} component={component}"
+            )
             self._context_open = False
             context.close()
 
@@ -398,7 +410,7 @@ class SQLMeshController:
         environment: str,
         **run_options: t.Unpack[RunOptions],
     ):
-        with self.instance(environment) as mesh:
+        with self.instance(environment, "run") as mesh:
             yield from mesh.run(**run_options)
 
     def plan(
@@ -408,7 +420,7 @@ class SQLMeshController:
         default_catalog: t.Optional[str],
         plan_options: PlanOptions,
     ):
-        with self.instance(environment) as mesh:
+        with self.instance(environment, "plan") as mesh:
             yield from mesh.plan(categorizer, default_catalog, **plan_options)
 
     def plan_and_run(
@@ -419,7 +431,7 @@ class SQLMeshController:
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
     ):
-        with self.instance(environment) as mesh:
+        with self.instance(environment, "plan_and_run") as mesh:
             yield from mesh.plan_and_run(
                 categorizer=categorizer,
                 default_catalog=default_catalog,
