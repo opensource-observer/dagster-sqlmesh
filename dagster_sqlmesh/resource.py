@@ -256,4 +256,6 @@ class SQLMeshResource(ConfigurableResource):
                 yield from event_handler.process_events(mesh.context, event)
 
     def get_controller(self, log_override: t.Optional[logging.Logger] = None):
-        return SQLMeshController.setup(self.config, log_override=log_override)
+        return SQLMeshController.setup_with_config(
+            self.config, log_override=log_override
+        )
