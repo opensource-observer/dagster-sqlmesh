@@ -22,7 +22,7 @@ class DagsterSQLMeshController(SQLMeshController):
     def to_asset_outs(
         self, environment: str, translator: SQLMeshDagsterTranslator
     ) -> SQLMeshMultiAssetOptions:
-        with self.instance(environment) as instance:
+        with self.instance(environment, "to_asset_outs") as instance:
             context = instance.context
             dag = context.dag
             output = SQLMeshMultiAssetOptions()

@@ -248,8 +248,7 @@ class SQLMeshResource(ConfigurableResource):
                 context, models_map, dag, "sqlmesh: "
             )
 
-            for event in controller.plan_and_run(
-                environment=environment,
+            for event in mesh.plan_and_run(
                 plan_options=plan_options,
                 run_options=run_options,
             ):
