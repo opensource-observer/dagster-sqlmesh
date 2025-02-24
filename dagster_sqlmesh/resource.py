@@ -87,7 +87,7 @@ class SQLMeshEventLogContext:
         self.log("warning", message, obj)
 
     def error(self, message: str, obj: t.Optional[t.Dict[str, t.Any]] = None):
-        self.log("warning", message, obj)
+        self.log("error", message, obj)
 
     def log(self, level: str | int, message: str, obj: t.Optional[t.Dict[str, t.Any]]):
         self._handler.log(level, message, self.ensure_standard_obj(obj))
@@ -180,7 +180,6 @@ class DagsterSQLMeshEventHandler:
                         "duration_ms": duration_ms,
                     },
                 )
-
             case console.LogSuccess(success):
                 self.update_stage("done")
                 if success:
@@ -188,7 +187,10 @@ class DagsterSQLMeshEventHandler:
                 else:
                     log_context.error("sqlmesh failed")
                     raise Exception("sqlmesh failed during run")
-
+            case console.LogError(message):
+                log_context.error(
+                    message,
+                )
             case _:
                 log_context.debug("Received event")
 
@@ -201,6 +203,10 @@ class DagsterSQLMeshEventHandler:
         message: str,
         obj: t.Optional[t.Dict[str, t.Any]] = None,
     ):
+        if level == "error":
+            self._logger.error(message)
+            return
+
         obj = obj or {}
         final_obj = obj.copy()
         final_obj["message"] = message
