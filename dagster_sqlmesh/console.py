@@ -5,6 +5,7 @@ import uuid
 import unittest
 import logging
 
+from sqlglot.expressions import Alter
 from sqlmesh.core.console import Console
 from sqlmesh.core.plan import EvaluatablePlan
 from sqlmesh.core.context_diff import ContextDiff
@@ -16,6 +17,7 @@ from sqlmesh.core.snapshot import (
     SnapshotChangeCategory,
     SnapshotInfoLike,
 )
+from sqlmesh.utils.concurrency import NodeExecutionFailedError
 
 logger = logging.getLogger(__name__)
 
@@ -194,8 +196,32 @@ class LogError:
 
 
 @dataclass
+class LogWarning:
+    message: str
+
+
+@dataclass
 class LogSuccess:
     message: str
+
+
+@dataclass
+class LogFailedModels:
+    errors: t.List[NodeExecutionFailedError]
+
+
+@dataclass
+class LogSkippedModels:
+    snapshot_names: t.Set[str]
+
+
+@dataclass
+class LogDestructiveChange:
+    snapshot_name: str
+    dropped_column_names: t.List[str]
+    alter_expressions: t.List[Alter]
+    dialect: str
+    error: bool = True
 
 
 @dataclass
@@ -254,7 +280,11 @@ ConsoleEvent = Union[
     ShowSQL,
     LogStatusUpdate,
     LogError,
+    LogWarning,
     LogSuccess,
+    LogFailedModels,
+    LogSkippedModels,
+    LogDestructiveChange,
     LoadingStart,
     LoadingStop,
     ShowSchemaDiff,
@@ -444,8 +474,31 @@ class EventConsole(Console):
     def log_error(self, message: str) -> None:
         self.publish(LogError(message))
 
+    def log_warning(self, message):
+        self.publish(LogWarning(message))
+
     def log_success(self, message: str) -> None:
         self.publish(LogSuccess(message))
+
+    def log_failed_models(self, errors):
+        self.publish(LogFailedModels(errors))
+
+    def log_skipped_models(self, snapshot_names):
+        self.publish(LogSkippedModels(snapshot_names))
+
+    def log_destructive_change(
+        self,
+        snapshot_name,
+        dropped_column_names,
+        alter_expressions,
+        dialect,
+        error=True,
+    ):
+        self.publish(
+            LogDestructiveChange(
+                snapshot_name, dropped_column_names, alter_expressions, dialect, error
+            )
+        )
 
     def loading_start(self, message: t.Optional[str] = None) -> uuid.UUID:
         event_id = uuid.uuid4()

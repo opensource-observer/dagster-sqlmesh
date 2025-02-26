@@ -1,6 +1,6 @@
 import typing as t
 
-from sqlmesh.core.scheduler import Scheduler
+from sqlmesh.core.scheduler import Scheduler, CompletionStatus
 
 
 class DagsterSQLMeshScheduler(Scheduler):
@@ -11,7 +11,7 @@ class DagsterSQLMeshScheduler(Scheduler):
         super().__init__(*args, **kwargs)
         self._selected_snapshots: t.Set[str] = selected_snapshots or set()
 
-    def run(self, *args, **kwargs) -> bool:
+    def run(self, *args, **kwargs) -> CompletionStatus:
         if len(self._selected_snapshots) > 0:
             kwargs["selected_snapshots"] = self._selected_snapshots
         return super().run(*args, **kwargs)
