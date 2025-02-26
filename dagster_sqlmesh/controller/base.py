@@ -8,7 +8,7 @@ from sqlmesh.utils.date import TimeLike
 from sqlmesh.core.context import Context
 from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.core.config import CategorizerConfig
-from sqlmesh.core.console import Console
+from sqlmesh.core.console import Console, set_console
 from sqlmesh.core.model import Model
 
 from ..events import ConsoleGenerator
@@ -378,10 +378,10 @@ class SQLMeshController:
         options: t.Dict[str, t.Any] = dict(
             paths=self.config.path,
             gateway=self.config.gateway,
-            console=self.console,
         )
         if self.config.sqlmesh_config:
             options["config"] = self.config.sqlmesh_config
+        set_console(self.console)
         return Context(**options)
 
     @contextmanager
