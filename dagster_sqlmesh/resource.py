@@ -191,6 +191,12 @@ class DagsterSQLMeshEventHandler:
                 log_context.error(
                     message,
                 )
+            case console.LogFailedModels(models):
+                log_context.error(
+                    "\n".join(
+                        [f"{str(model)}\n{str(model.__cause__)}" for model in models]
+                    ),
+                )
             case _:
                 log_context.debug("Received event")
 
