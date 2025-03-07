@@ -10,7 +10,7 @@ from sqlmesh.core.console import Console
 from sqlmesh.core.plan import EvaluatablePlan
 from sqlmesh.core.context_diff import ContextDiff
 from sqlmesh.core.plan import PlanBuilder
-from sqlmesh.core.table_diff import RowDiff, SchemaDiff
+from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.snapshot import (
     Snapshot,
@@ -197,7 +197,8 @@ class LogError:
 
 @dataclass
 class LogWarning:
-    message: str
+    short_message: str
+    long_message: t.Optional[str] = None
 
 
 @dataclass
@@ -252,6 +253,16 @@ class ConsoleException:
     exception: Exception
 
 
+@dataclass
+class PrintEnvironments:
+    environments_summary: t.Dict[str, int]
+
+
+@dataclass
+class ShowTableDiffSummary:
+    table_diff: TableDiff
+
+
 ConsoleEvent = Union[
     StartPlanEvaluation,
     StopPlanEvaluation,
@@ -294,6 +305,8 @@ ConsoleEvent = Union[
     StopMigrationProgress,
     StartSnapshotMigrationProgress,
     ConsoleException,
+    PrintEnvironments,
+    ShowTableDiffSummary,
 ]
 
 ConsoleEventHandler = Callable[[ConsoleEvent], None]
@@ -474,8 +487,10 @@ class EventConsole(Console):
     def log_error(self, message: str) -> None:
         self.publish(LogError(message))
 
-    def log_warning(self, message):
-        self.publish(LogWarning(message))
+    def log_warning(
+        self, short_message: str, long_message: t.Optional[str] = None
+    ) -> None:
+        self.publish(LogWarning(short_message, long_message))
 
     def log_success(self, message: str) -> None:
         self.publish(LogSuccess(message))
@@ -537,6 +552,12 @@ class EventConsole(Console):
 
     def exception(self, exc: Exception):
         self.publish(ConsoleException(exc))
+
+    def print_environments(self, environments_summary: t.Dict[str, int]) -> None:
+        self.publish(PrintEnvironments(environments_summary))
+
+    def show_table_diff_summary(self, table_diff: TableDiff) -> None:
+        self.publish(ShowTableDiffSummary(table_diff))
 
 
 class DebugEventConsole(EventConsole):
