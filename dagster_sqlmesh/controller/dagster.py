@@ -7,8 +7,8 @@ from dagster import (
 )
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 
-from ..sqlmesh_types import SQLMeshModelDep, SQLMeshMultiAssetOptions
 from ..translator import SQLMeshDagsterTranslator
+from ..types import SQLMeshModelDep, SQLMeshMultiAssetOptions
 from ..utils import sqlmesh_model_name_to_key
 from .base import SQLMeshController
 

@@ -6,15 +6,21 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: local
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0  # Use same version as in pyproject.toml
     hooks:
       - id: mypy
-        name: mypy
-        entry: mypy
-        language: python
-        types: [python]
-        require_serial: true
-        additional_dependencies: []  # All dependencies are in our venv
+        additional_dependencies:
+          - types-setuptools
+          - types-requests
+          - types-sqlalchemy
+          - types-PyYAML
+          - types-python-dateutil
+          - pyarrow-stubs>=17.0.0
+          - dagster>=1.7.8
+          - sqlmesh<1.0
+          - pytest>=8.3.2
+          - pyarrow>=18.0.0
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.6.2  # Latest stable version

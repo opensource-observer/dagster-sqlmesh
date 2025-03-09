@@ -89,9 +89,6 @@ mypy:
 
 # Sample project commands
 dagster-dev:
-	$(PYTHON_CMD) -m dagster dev -h 0.0.0.0 -f sample/dagster_project/definitions.py --workspace-dir sample
-
-sample-materialize:
-	$(PYTHON_CMD) -m dagster asset materialize -f sample/dagster_project/definitions.py --select '*'
+	$(PYTHON_CMD) -m dagster dev -h 0.0.0.0 -f sample/dagster_project/definitions.py
 
 .PHONY: init init-python install-python check-uv install-python-deps upgrade-python-deps clean test mypy install-node check-pnpm install-node-deps upgrade-node-deps sample-dev sample-materialize 
