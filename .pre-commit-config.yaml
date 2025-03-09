@@ -7,20 +7,28 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0  # Use same version as in pyproject.toml
+    rev: v1.8.0
     hooks:
       - id: mypy
+        args: [
+          --cache-dir=.mypy_cache,  # Enable caching for faster runs
+          --ignore-missing-imports,  # Ignore missing imports from third-party packages
+        ]
         additional_dependencies:
+          # Type stubs only - these are lightweight
           - types-setuptools
           - types-requests
           - types-sqlalchemy
           - types-PyYAML
           - types-python-dateutil
           - pyarrow-stubs>=17.0.0
-          - dagster>=1.7.8
-          - sqlmesh<1.0
-          - pytest>=8.3.2
-          - pyarrow>=18.0.0
+          # Core packages with minimal dependencies
+          - "dagster[mypy]>=1.7.8"  # Only mypy-related dependencies
+          - sqlmesh<1.0  # No alternative minimal package available
+          - pytest>=8.0.0  # Includes type hints
+          # Required for polars integration
+          - polars>=0.20.5  # No type stubs available yet
+          - dagster-duckdb-polars>=0.21.8  # Required for polars integration
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.6.2  # Latest stable version
