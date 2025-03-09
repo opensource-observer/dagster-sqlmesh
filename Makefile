@@ -94,4 +94,4 @@ dagster-dev:
 dagster-materialize:
 	$(PYTHON_CMD) -m dagster asset materialize -f sample/dagster_project/definitions.py --select '*'
 
-.PHONY: init init-python install-python check-uv install-python-deps upgrade-python-deps clean test mypy install-node check-pnpm install-node-deps upgrade-node-deps sample-dev sample-materialize dagster-dev dagster-materialize 
+.PHONY: init init-python install-python check-uv install-python-deps upgrade-python-deps clean test mypy install-node check-pnpm install-node-deps upgrade-node-deps sample-dev dagster-dev dagster-materialize 
