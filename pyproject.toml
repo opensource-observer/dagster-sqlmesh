@@ -21,7 +21,64 @@ dagster-webserver = "^1.8.1"
 ruff = "^0.6.2"
 polars = "^1.5.0"
 dagster-duckdb-polars = "^0.24.2"
+mypy = "^1.14.1"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff.lint]
+# Ignore E402: Module level import not at top of file
+ignore = ["E402", "E712"]
+select = [
+    'I001',    # isort
+    "E4",      # pycodestyle errors
+    "E7",      # pycodestyle errors
+    "E9",      # pycodestyle errors
+    "F",       # pyflakes
+    "F401",    # unused imports
+    "F403",    # star imports usage
+    "F405",    # star imports usage
+    "F821",    # undefined names
+    "UP",      # pyupgrade (modernize Python code)
+    "RUF"      # ruff-specific rules
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["dagster_sqlmesh"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+combine-as-imports = true
+split-on-trailing-comma = true
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = "dagster_sqlmesh.*"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ".venv.*"
+ignore_errors = true
