@@ -85,7 +85,7 @@ test:
 	$(PYTHON_CMD) -m pytest -vv --log-cli-level=INFO $(filter-out $@,$(MAKECMDGOALS))
 
 mypy:
-	$(PYTHON_CMD) -m mypy src/
+	$(PYTHON_CMD) -m mypy dagster_sqlmesh/ sample/
 
 # Sample project commands
 dagster-dev:

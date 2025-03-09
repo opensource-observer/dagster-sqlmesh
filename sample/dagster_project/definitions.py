@@ -1,17 +1,18 @@
 import os
-
 import time
+import typing as t
+
+import polars as pl
 from dagster import (
-    MaterializeResult,
-    asset,
     AssetExecutionContext,
     Definitions,
+    MaterializeResult,
+    asset,
     define_asset_job,
 )
 from dagster_duckdb_polars import DuckDBPolarsIOManager
-import polars as pl
 
-from dagster_sqlmesh import sqlmesh_assets, SQLMeshContextConfig, SQLMeshResource
+from dagster_sqlmesh import SQLMeshContextConfig, SQLMeshResource, sqlmesh_assets
 
 CURR_DIR = os.path.dirname(__file__)
 SQLMESH_PROJECT_PATH = os.path.abspath(os.path.join(CURR_DIR, "../sqlmesh_project"))
@@ -52,7 +53,9 @@ def test_source() -> pl.DataFrame:
 
 
 @sqlmesh_assets(environment="dev", config=sqlmesh_config)
-def sqlmesh_project(context: AssetExecutionContext, sqlmesh: SQLMeshResource):
+def sqlmesh_project(
+    context: AssetExecutionContext, sqlmesh: SQLMeshResource
+) -> t.Iterable[MaterializeResult]:
     yield from sqlmesh.run(context)
 
 

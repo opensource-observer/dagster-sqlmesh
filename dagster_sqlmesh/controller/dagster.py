@@ -1,17 +1,16 @@
 import logging
-import typing as t
 
-from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 from dagster import (
     AssetDep,
-    AssetOut,
     AssetKey,
+    AssetOut,
 )
+from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 
+from ..sqlmesh_types import SQLMeshModelDep, SQLMeshMultiAssetOptions
+from ..translator import SQLMeshDagsterTranslator
 from ..utils import sqlmesh_model_name_to_key
 from .base import SQLMeshController
-from ..translator import SQLMeshDagsterTranslator
-from ..types import SQLMeshMultiAssetOptions, SQLMeshModelDep
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ class DagsterSQLMeshController(SQLMeshController):
             context = instance.context
             dag = context.dag
             output = SQLMeshMultiAssetOptions()
-            depsMap: t.Dict[str, CoercibleToAssetDep] = {}
+            depsMap: dict[str, CoercibleToAssetDep] = {}
 
             for model_fqn, deps in dag.graph.items():
                 logger.debug(f"model found: {model_fqn}")
@@ -42,7 +41,7 @@ class DagsterSQLMeshController(SQLMeshController):
                     SQLMeshModelDep(fqn=dep, model=context.get_model(dep))
                     for dep in deps
                 ]
-                internal_asset_deps: t.Set[AssetKey] = set()
+                internal_asset_deps: set[AssetKey] = set()
                 for dep in model_deps:
                     if dep.model:
                         internal_asset_deps.add(

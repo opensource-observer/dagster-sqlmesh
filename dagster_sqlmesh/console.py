@@ -1,22 +1,23 @@
-import typing as t
-from typing import Dict, Union, Callable
-from dataclasses import dataclass
-import uuid
-import unittest
 import logging
+import typing as t
+import unittest
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from sqlglot.expressions import Alter
 from sqlmesh.core.console import Console
-from sqlmesh.core.plan import EvaluatablePlan
 from sqlmesh.core.context_diff import ContextDiff
-from sqlmesh.core.plan import PlanBuilder
-from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
+from sqlmesh.core.linter.rule import RuleViolation
+from sqlmesh.core.model import Model
+from sqlmesh.core.plan import EvaluatablePlan, PlanBuilder
 from sqlmesh.core.snapshot import (
     Snapshot,
     SnapshotChangeCategory,
     SnapshotInfoLike,
 )
+from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.utils.concurrency import NodeExecutionFailedError
 
 logger = logging.getLogger(__name__)
@@ -49,9 +50,9 @@ class StopPlanEvaluation:
 
 @dataclass
 class StartEvaluationProgress:
-    batches: Dict[Snapshot, int]
+    batches: dict[Snapshot, int]
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: t.Optional[str]
+    default_catalog: str | None
 
 
 @dataclass
@@ -63,7 +64,7 @@ class StartSnapshotEvaluationProgress:
 class UpdateSnapshotEvaluationProgress:
     snapshot: Snapshot
     batch_idx: int
-    duration_ms: t.Optional[int]
+    duration_ms: int | None
 
 
 @dataclass
@@ -75,7 +76,7 @@ class StopEvaluationProgress:
 class StartCreationProgress:
     total_tasks: int
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: t.Optional[str]
+    default_catalog: str | None
 
 
 @dataclass
@@ -107,7 +108,7 @@ class StopCleanup:
 class StartPromotionProgress:
     total_tasks: int
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: t.Optional[str]
+    default_catalog: str | None
 
 
 @dataclass
@@ -160,7 +161,7 @@ class StopEnvMigrationProgress:
 class ShowModelDifferenceSummary:
     context_diff: ContextDiff
     environment_naming_info: EnvironmentNamingInfo
-    default_catalog: t.Optional[str]
+    default_catalog: str | None
     no_diff: bool = True
 
 
@@ -168,7 +169,7 @@ class ShowModelDifferenceSummary:
 class PlanEvent:
     plan_builder: PlanBuilder
     auto_apply: bool
-    default_catalog: t.Optional[str]
+    default_catalog: str | None
     no_diff: bool = False
     no_prompts: bool = False
 
@@ -176,7 +177,7 @@ class PlanEvent:
 @dataclass
 class LogTestResults:
     result: unittest.result.TestResult
-    output: t.Optional[str]
+    output: str | None
     target_dialect: str
 
 
@@ -198,7 +199,7 @@ class LogError:
 @dataclass
 class LogWarning:
     short_message: str
-    long_message: t.Optional[str] = None
+    long_message: str | None = None
 
 
 @dataclass
@@ -208,27 +209,27 @@ class LogSuccess:
 
 @dataclass
 class LogFailedModels:
-    errors: t.List[NodeExecutionFailedError]
+    errors: list[NodeExecutionFailedError]
 
 
 @dataclass
 class LogSkippedModels:
-    snapshot_names: t.Set[str]
+    snapshot_names: set[str]
 
 
 @dataclass
 class LogDestructiveChange:
     snapshot_name: str
-    dropped_column_names: t.List[str]
-    alter_expressions: t.List[Alter]
+    dropped_column_names: list[str]
+    alter_expressions: list[Alter]
     dialect: str
     error: bool = True
 
 
 @dataclass
 class LoadingStart:
-    message: t.Optional[str] = None
-    id: uuid.UUID = uuid.uuid4()
+    message: str | None = None
+    id: uuid.UUID = field(default_factory=uuid.uuid4)
 
 
 @dataclass
@@ -255,7 +256,7 @@ class ConsoleException:
 
 @dataclass
 class PrintEnvironments:
-    environments_summary: t.Dict[str, int]
+    environments_summary: dict[str, int]
 
 
 @dataclass
@@ -263,51 +264,51 @@ class ShowTableDiffSummary:
     table_diff: TableDiff
 
 
-ConsoleEvent = Union[
-    StartPlanEvaluation,
-    StopPlanEvaluation,
-    StartEvaluationProgress,
-    StartSnapshotEvaluationProgress,
-    UpdateSnapshotEvaluationProgress,
-    StopEvaluationProgress,
-    StartCreationProgress,
-    UpdateCreationProgress,
-    StopCreationProgress,
-    StartCleanup,
-    UpdateCleanupProgress,
-    StopCleanup,
-    StartPromotionProgress,
-    UpdatePromotionProgress,
-    StopPromotionProgress,
-    UpdateSnapshotMigrationProgress,
-    LogMigrationStatus,
-    StopSnapshotMigrationProgress,
-    StartEnvMigrationProgress,
-    UpdateEnvMigrationProgress,
-    StopEnvMigrationProgress,
-    ShowModelDifferenceSummary,
-    PlanEvent,
-    LogTestResults,
-    ShowSQL,
-    LogStatusUpdate,
-    LogError,
-    LogWarning,
-    LogSuccess,
-    LogFailedModels,
-    LogSkippedModels,
-    LogDestructiveChange,
-    LoadingStart,
-    LoadingStop,
-    ShowSchemaDiff,
-    ShowRowDiff,
-    StartMigrationProgress,
-    UpdateMigrationProgress,
-    StopMigrationProgress,
-    StartSnapshotMigrationProgress,
-    ConsoleException,
-    PrintEnvironments,
-    ShowTableDiffSummary,
-]
+ConsoleEvent = (
+    StartPlanEvaluation
+    | StopPlanEvaluation
+    | StartEvaluationProgress
+    | StartSnapshotEvaluationProgress
+    | UpdateSnapshotEvaluationProgress
+    | StopEvaluationProgress
+    | StartCreationProgress
+    | UpdateCreationProgress
+    | StopCreationProgress
+    | StartCleanup
+    | UpdateCleanupProgress
+    | StopCleanup
+    | StartPromotionProgress
+    | UpdatePromotionProgress
+    | StopPromotionProgress
+    | UpdateSnapshotMigrationProgress
+    | LogMigrationStatus
+    | StopSnapshotMigrationProgress
+    | StartEnvMigrationProgress
+    | UpdateEnvMigrationProgress
+    | StopEnvMigrationProgress
+    | ShowModelDifferenceSummary
+    | PlanEvent
+    | LogTestResults
+    | ShowSQL
+    | LogStatusUpdate
+    | LogError
+    | LogWarning
+    | LogSuccess
+    | LogFailedModels
+    | LogSkippedModels
+    | LogDestructiveChange
+    | LoadingStart
+    | LoadingStop
+    | ShowSchemaDiff
+    | ShowRowDiff
+    | StartMigrationProgress
+    | UpdateMigrationProgress
+    | StopMigrationProgress
+    | StartSnapshotMigrationProgress
+    | ConsoleException
+    | PrintEnvironments
+    | ShowTableDiffSummary
+)
 
 ConsoleEventHandler = Callable[[ConsoleEvent], None]
 
@@ -329,15 +330,15 @@ class EventConsole(Console):
     promotion, migration, and testing.
     """
 
-    categorizer: t.Optional[SnapshotCategorizer] = None
+    categorizer: SnapshotCategorizer | None = None
 
-    def __init__(self, log_override: t.Optional[logging.Logger] = None):
-        self._handlers: Dict[str, ConsoleEventHandler] = {}
+    def __init__(self, log_override: logging.Logger | None = None):
+        self._handlers: dict[str, ConsoleEventHandler] = {}
         self.logger = log_override or logger
         self.id = str(uuid.uuid4())
         self.categorizer = None
 
-    def add_snapshot_categorizer(self, categorizer: SnapshotCategorizer):
+    def add_snapshot_categorizer(self, categorizer: SnapshotCategorizer) -> None:
         self.categorizer = categorizer
 
     def start_plan_evaluation(self, plan: EvaluatablePlan) -> None:
@@ -348,9 +349,9 @@ class EventConsole(Console):
 
     def start_evaluation_progress(
         self,
-        batches: Dict[Snapshot, int],
+        batches: dict[Snapshot, int],
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
     ) -> None:
         self.publish(
             StartEvaluationProgress(batches, environment_naming_info, default_catalog)
@@ -360,7 +361,7 @@ class EventConsole(Console):
         self.publish(StartSnapshotEvaluationProgress(snapshot))
 
     def update_snapshot_evaluation_progress(
-        self, snapshot: Snapshot, batch_idx: int, duration_ms: t.Optional[int]
+        self, snapshot: Snapshot, batch_idx: int, duration_ms: int | None
     ) -> None:
         self.publish(UpdateSnapshotEvaluationProgress(snapshot, batch_idx, duration_ms))
 
@@ -371,7 +372,7 @@ class EventConsole(Console):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
     ) -> None:
         self.publish(
             StartCreationProgress(total_tasks, environment_naming_info, default_catalog)
@@ -398,7 +399,7 @@ class EventConsole(Console):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
     ) -> None:
         self.publish(
             StartPromotionProgress(
@@ -439,7 +440,7 @@ class EventConsole(Console):
         self,
         context_diff: ContextDiff,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
         no_diff: bool = True,
     ) -> None:
         self.publish(
@@ -455,7 +456,7 @@ class EventConsole(Console):
         self,
         plan_builder: PlanBuilder,
         auto_apply: bool,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
         no_diff: bool = False,
         no_prompts: bool = False,
     ) -> None:
@@ -473,7 +474,7 @@ class EventConsole(Console):
     def log_test_results(
         self,
         result: unittest.result.TestResult,
-        output: t.Optional[str],
+        output: str | None,
         target_dialect: str,
     ) -> None:
         self.publish(LogTestResults(result, output, target_dialect))
@@ -487,35 +488,33 @@ class EventConsole(Console):
     def log_error(self, message: str) -> None:
         self.publish(LogError(message))
 
-    def log_warning(
-        self, short_message: str, long_message: t.Optional[str] = None
-    ) -> None:
+    def log_warning(self, short_message: str, long_message: str | None = None) -> None:
         self.publish(LogWarning(short_message, long_message))
 
     def log_success(self, message: str) -> None:
         self.publish(LogSuccess(message))
 
-    def log_failed_models(self, errors):
+    def log_failed_models(self, errors: list[NodeExecutionFailedError]) -> None:
         self.publish(LogFailedModels(errors))
 
-    def log_skipped_models(self, snapshot_names):
+    def log_skipped_models(self, snapshot_names: set[str]) -> None:
         self.publish(LogSkippedModels(snapshot_names))
 
     def log_destructive_change(
         self,
-        snapshot_name,
-        dropped_column_names,
-        alter_expressions,
-        dialect,
-        error=True,
-    ):
+        snapshot_name: str,
+        dropped_column_names: list[str],
+        alter_expressions: list[Alter],
+        dialect: str,
+        error: bool = True,
+    ) -> None:
         self.publish(
             LogDestructiveChange(
                 snapshot_name, dropped_column_names, alter_expressions, dialect, error
             )
         )
 
-    def loading_start(self, message: t.Optional[str] = None) -> uuid.UUID:
+    def loading_start(self, message: str | None = None) -> uuid.UUID:
         event_id = uuid.uuid4()
         self.publish(LoadingStart(message, event_id))
         return event_id
@@ -541,23 +540,38 @@ class EventConsole(Console):
         for handler in self._handlers.values():
             handler(event)
 
-    def add_handler(self, handler: ConsoleEventHandler):
+    def add_handler(self, handler: ConsoleEventHandler) -> str:
         handler_id = str(uuid.uuid4())
         self.logger.debug(f"EventConsole[{self.id}]: Adding handler {handler_id}")
         self._handlers[handler_id] = handler
         return handler_id
 
-    def remove_handler(self, handler_id: str):
+    def remove_handler(self, handler_id: str) -> None:
         del self._handlers[handler_id]
 
-    def exception(self, exc: Exception):
+    def exception(self, exc: Exception) -> None:
         self.publish(ConsoleException(exc))
 
-    def print_environments(self, environments_summary: t.Dict[str, int]) -> None:
+    def print_environments(self, environments_summary: dict[str, int]) -> None:
         self.publish(PrintEnvironments(environments_summary))
 
     def show_table_diff_summary(self, table_diff: TableDiff) -> None:
         self.publish(ShowTableDiffSummary(table_diff))
+
+    def show_linter_violations(
+        self,
+        violations: list[RuleViolation],
+        model: Model,
+        is_error: bool = False,
+    ) -> None:
+        """Show linting violations from SQLMesh.
+
+        Args:
+            violations: List of linting violations to display
+            model: The model being linted
+            is_error: Whether the violations are errors
+        """
+        self.publish(LogWarning("Linting violations found", str(violations)))
 
 
 class DebugEventConsole(EventConsole):
@@ -577,9 +591,9 @@ class DebugEventConsole(EventConsole):
 
     def start_evaluation_progress(
         self,
-        batches: Dict[Snapshot, int],
+        batches: dict[Snapshot, int],
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
     ) -> None:
         super().start_evaluation_progress(
             batches, environment_naming_info, default_catalog
@@ -593,7 +607,7 @@ class DebugEventConsole(EventConsole):
         self._console.start_snapshot_evaluation_progress(snapshot)
 
     def update_snapshot_evaluation_progress(
-        self, snapshot: Snapshot, batch_idx: int, duration_ms: t.Optional[int]
+        self, snapshot: Snapshot, batch_idx: int, duration_ms: int | None
     ) -> None:
         super().update_snapshot_evaluation_progress(snapshot, batch_idx, duration_ms)
         self._console.update_snapshot_evaluation_progress(
@@ -608,7 +622,7 @@ class DebugEventConsole(EventConsole):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
     ) -> None:
         super().start_creation_progress(
             total_tasks, environment_naming_info, default_catalog
@@ -633,7 +647,7 @@ class DebugEventConsole(EventConsole):
         self,
         total_tasks: int,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
     ) -> None:
         super().start_promotion_progress(
             total_tasks, environment_naming_info, default_catalog
@@ -656,7 +670,7 @@ class DebugEventConsole(EventConsole):
         self,
         context_diff: ContextDiff,
         environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
         no_diff: bool = True,
     ) -> None:
         super().show_model_difference_summary(
@@ -677,7 +691,7 @@ class DebugEventConsole(EventConsole):
         self,
         plan_builder: PlanBuilder,
         auto_apply: bool,
-        default_catalog: t.Optional[str],
+        default_catalog: str | None,
         no_diff: bool = False,
         no_prompts: bool = False,
     ) -> None:
@@ -689,7 +703,7 @@ class DebugEventConsole(EventConsole):
     def log_test_results(
         self,
         result: unittest.result.TestResult,
-        output: t.Optional[str],
+        output: str | None,
         target_dialect: str,
     ) -> None:
         super().log_test_results(result, output, target_dialect)
@@ -711,7 +725,7 @@ class DebugEventConsole(EventConsole):
         super().log_success(message)
         self._console.log_success(message)
 
-    def loading_start(self, message: t.Optional[str] = None) -> uuid.UUID:
+    def loading_start(self, message: str | None = None) -> uuid.UUID:
         event_id = super().loading_start(message)
         self._console.loading_start(message)
         return event_id
@@ -732,3 +746,12 @@ class DebugEventConsole(EventConsole):
     ) -> None:
         super().show_row_diff(row_diff, show_sample)
         self._console.show_row_diff(row_diff, show_sample, skip_grain_check)
+
+    def show_linter_violations(
+        self,
+        violations: list[RuleViolation],
+        model: Model,
+        is_error: bool = False,
+    ) -> None:
+        super().show_linter_violations(violations, model, is_error)
+        self._console.show_linter_violations(violations, model, is_error)

@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.2  # Match your ruff version from pyproject.toml
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1  # Match your mypy version from pyproject.toml
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - dagster>=1.7.8
+          - sqlmesh<1.0
+          - pyarrow>=18.0.0
+          - types-setuptools
+          - types-requests
+          - types-sqlalchemy
+          - types-PyYAML
+          - types-python-dateutil
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.5.31  # Latest stable UV version (no 'v' prefix)
+    hooks:
+      - id: pip-compile
+        name: Lock dependencies
+        args: [pyproject.toml, --output-file=requirements.txt]
+        files: ^pyproject\.toml$
+      - id: pip-compile
+        name: Lock dev dependencies
+        args: [pyproject.toml, --extra=dev, --output-file=requirements-dev.txt]
+        files: ^pyproject\.toml$ 
