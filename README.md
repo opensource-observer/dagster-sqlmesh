@@ -91,7 +91,11 @@ accompanying sqlmesh project from `sample/sqlmesh_project` configured as an
 asset. To run the sample dagster project deployment with a UI:
 
 ```bash
-make dagster-dev
+make dagster-dev 
+```
+or 
+```bash
+make dev
 ```
 
 If you'd like to materialize the dagster assets quickly on the CLI:

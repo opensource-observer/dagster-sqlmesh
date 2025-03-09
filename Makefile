@@ -88,10 +88,15 @@ mypy:
 	$(PYTHON_CMD) -m mypy dagster_sqlmesh/ sample/
 
 # Sample project commands
-dagster-dev:
-	$(PYTHON_CMD) -m dagster dev -h 0.0.0.0 -f sample/dagster_project/definitions.py
+clean-dagster:
+	rm -rf /tmp/dagster
+
+dagster-dev: clean-dagster
+	DAGSTER_HOME=$(CURDIR)/sample/dagster_project $(PYTHON_CMD) -m dagster dev -h 0.0.0.0 -w sample/dagster_project/workspace.yaml
+
+dev: dagster-dev  # Alias for dagster-dev
 
 dagster-materialize:
 	$(PYTHON_CMD) -m dagster asset materialize -f sample/dagster_project/definitions.py --select '*'
 
-.PHONY: init init-python install-python check-uv install-python-deps upgrade-python-deps clean test mypy install-node check-pnpm install-node-deps upgrade-node-deps sample-dev dagster-dev dagster-materialize 
+.PHONY: init init-python install-python check-uv install-python-deps upgrade-python-deps clean test mypy install-node check-pnpm install-node-deps upgrade-node-deps sample-dev dagster-dev dagster-materialize clean-dagster 
