@@ -24,6 +24,13 @@ dev = [
     "polars>=1.5.0",
     "dagster-duckdb-polars>=0.24.2",
     "mypy>=1.14.1",
+    # Type stubs
+    "types-setuptools",
+    "types-requests",
+    "types-sqlalchemy",
+    "types-PyYAML",
+    "types-python-dateutil",
+    "pyarrow-stubs>=17.0.0",
 ]
 
 [build-system]
