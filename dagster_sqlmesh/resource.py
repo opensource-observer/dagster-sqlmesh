@@ -151,8 +151,8 @@ class DagsterSQLMeshEventHandler:
                         "plan": plan,
                     },
                 )
-            case console.StopPlanEvaluation:
-                log_context.info("Plan evaluation completed")  # type: ignore
+            case console.StopPlanEvaluation():
+                log_context.info("Plan evaluation completed")
             case console.StartEvaluationProgress(
                 batches, environment_naming_info, default_catalog
             ):
