@@ -55,21 +55,33 @@ _Note: this is a python project but some of our dependent tools are in typescrip
 
 ### Installing
 
-To install everything you need for development just do the following:
+The project uses Make commands to simplify the development setup process. To get started:
 
 ```bash
-poetry install
-pnpm install
+make init
+```
+
+This will:
+- Set up a Python virtual environment with Python 3.12
+- Install all Python dependencies
+- Install Node.js dependencies via pnpm
+
+_Note: All Make commands automatically use the correct virtual environment - you don't need to activate it manually._
+
+To upgrade dependencies:
+```bash
+make upgrade-python-deps  # Upgrade Python dependencies
+make upgrade-node-deps   # Upgrade Node.js dependencies
 ```
 
 ### Running tests
 
 We have tests that should work entirely locally. You may see a `db.db` file appear in the root of the repository when these tests are run. It can be safely ignored or deleted.
 
-We run tests with `pytest` like so:
+To run tests:
 
 ```bash
-poetry run pytest
+make test
 ```
 
 ### Running the "sample" dagster project
@@ -79,13 +91,17 @@ accompanying sqlmesh project from `sample/sqlmesh_project` configured as an
 asset. To run the sample dagster project deployment with a UI:
 
 ```bash
-poetry run dagster dev -h 0.0.0.0 -f sample/dagster_project/definitions.py
+make dagster-dev 
+```
+or 
+```bash
+make dev
 ```
 
 If you'd like to materialize the dagster assets quickly on the CLI:
 
 ```bash
-dagster asset materialize -f sample/dagster_project/definitions.py --select '*'
+make dagster-materialize
 ```
 
 _Note: The sqlmesh project that is in the sample folder has a dependency on a

@@ -1,12 +1,13 @@
 import logging
 
 import polars
+
 from .conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 
 
-def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
+def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext) -> None:
     sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
     )
@@ -19,7 +20,7 @@ def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     assert staging_model_count[0][0] == 7
 
 
-def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
+def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext) -> None:
     logger.debug("SQLMESH MATERIALIZATION 1")
     sample_sqlmesh_test_context.plan_and_run(
         environment="dev",

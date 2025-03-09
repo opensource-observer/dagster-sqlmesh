@@ -1,8 +1,8 @@
 import sqlglot
+from dagster import AssetKey
 from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
-from dagster import AssetKey
 
 
 class SQLMeshDagsterTranslator:

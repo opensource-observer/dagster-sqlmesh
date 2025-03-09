@@ -17,8 +17,6 @@
   },
   "devDependencies": {
     "eslint": "^8.57.0",
-    "husky": "^8.0.3",
-    "lint-staged": "^15.2.7",
     "prettier": "^3.3.2",
     "pyright": "^1.1.377",
     "turbo": "^1.13.4"
