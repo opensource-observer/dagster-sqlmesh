@@ -10,7 +10,6 @@ from sqlmesh.core.config import CategorizerConfig
 from sqlmesh.core.console import Console, set_console
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
-from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 
@@ -173,12 +172,9 @@ class SQLMeshInstance:
             default_catalog: str,
         ) -> None:
             try:
-                builder = t.cast(  # type: ignore # (don't want to change code I don't understand yet)
-                    PlanBuilder,
-                    context.plan_builder(
-                        environment=environment,
-                        **plan_options,
-                    ),
+                builder = context.plan_builder(
+                    environment=environment,
+                    **plan_options,
                 )
                 logger.debug("dagster-sqlmesh: plan")
                 controller.console.plan(
