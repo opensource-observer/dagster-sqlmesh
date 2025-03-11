@@ -12,7 +12,11 @@ from dagster import (
 )
 from dagster_duckdb_polars import DuckDBPolarsIOManager
 
-from dagster_sqlmesh import SQLMeshContextConfig, SQLMeshResource, sqlmesh_assets
+from dagster_sqlmesh import (
+    SQLMeshConcurrentResource,
+    SQLMeshContextConfig,
+    sqlmesh_assets,
+)
 
 CURR_DIR = os.path.dirname(__file__)
 SQLMESH_PROJECT_PATH = os.path.abspath(os.path.join(CURR_DIR, "../sqlmesh_project"))
@@ -54,7 +58,7 @@ def test_source() -> pl.DataFrame:
 
 @sqlmesh_assets(environment="dev", config=sqlmesh_config)
 def sqlmesh_project(
-    context: AssetExecutionContext, sqlmesh: SQLMeshResource
+    context: AssetExecutionContext, sqlmesh: SQLMeshConcurrentResource
 ) -> t.Iterable[MaterializeResult]:
     yield from sqlmesh.run(context)
 
@@ -64,7 +68,7 @@ all_assets_job = define_asset_job(name="all_assets_job")
 defs = Definitions(
     assets=[sqlmesh_project, test_source, reset_asset],
     resources={
-        "sqlmesh": SQLMeshResource(config=sqlmesh_config),
+        "sqlmesh": SQLMeshConcurrentResource(config=sqlmesh_config),
         "io_manager": DuckDBPolarsIOManager(
             database=DUCKDB_PATH,
             schema="sources",

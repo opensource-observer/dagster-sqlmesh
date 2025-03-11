@@ -1,9 +1,16 @@
 import logging
 import typing as t
+from contextlib import contextmanager
 
 from dagster import (
     AssetExecutionContext,
+    AssetKey,
+    AssetObservation,
     ConfigurableResource,
+    DagsterEventType,
+    EventLogEntry,
+    EventRecordsFilter,
+    InitResourceContext,
     MaterializeResult,
 )
 from sqlmesh import Model
@@ -255,6 +262,100 @@ class SQLMeshResource(ConfigurableResource):
                         in context.selected_output_names
                     ):
                         models_map[key] = model
+
+            event_handler = DagsterSQLMeshEventHandler(
+                context, models_map, dag, "sqlmesh: "
+            )
+
+            for event in mesh.plan_and_run(
+                plan_options=plan_options,
+                run_options=run_options,
+            ):
+                yield from event_handler.process_events(mesh.context, event)
+
+    def get_controller(
+        self, log_override: logging.Logger | None = None
+    ) -> SQLMeshController:
+        return SQLMeshController.setup_with_config(
+            self.config, log_override=log_override
+        )
+
+
+class SQLMeshConcurrentResource(ConfigurableResource):
+    config: SQLMeshContextConfig
+
+    @contextmanager
+    def yield_for_execution(
+        self, context: InitResourceContext | None = None
+    ) -> t.Generator["SQLMeshConcurrentResource", None, None]:
+        """Initialize SQLMesh clients during resource setup."""
+
+        yield self
+
+    def log_event(
+        self, context: AssetExecutionContext, models_map: dict[str, Model]
+    ) -> None:
+        context.log_event(
+            event=AssetObservation(
+                asset_key=AssetKey(context.asset_key),
+                metadata={
+                    "run_id": context.run_id,
+                    "models": list(models_map.keys()),
+                },
+            )
+        )
+
+        print(f"Selected Asset Keys: {context.selected_asset_keys}")
+
+    def get_active_models(self, context: AssetExecutionContext) -> None:
+        event_records_filter: EventRecordsFilter = EventRecordsFilter(
+            event_type=DagsterEventType.ASSET_OBSERVATION,
+        )
+        event_records: list[EventLogEntry] = context.instance.get_event_records(
+            event_records_filter
+        )
+        print(f"EVENT RECORDS (PRINT): {event_records}")
+        context.log.info(f"EVENT RECORDS (LOG): {event_records}")
+
+    def run(
+        self,
+        context: AssetExecutionContext,
+        environment: str = "dev",
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
+    ) -> t.Iterable[MaterializeResult]:
+        """Execute SQLMesh based on the configuration given"""
+        plan_options = plan_options or {}
+        run_options = run_options or {}
+
+        logger = context.log
+
+        controller = self.get_controller(logger)
+        with controller.instance(environment) as mesh:
+            dag = mesh.models_dag()
+
+            models = mesh.models()
+            models_map = models.copy()
+            if context.selected_output_names:
+                models_map = {}
+                for key, model in models.items():
+                    if (
+                        sqlmesh_model_name_to_key(model.name)
+                        in context.selected_output_names
+                    ):
+                        models_map[key] = model
+
+            full_dag = mesh.models_dag()
+            dag = full_dag.prune(*models_map.keys())
+
+            plan_options["select_models"] = [*models_map.keys()]
+            run_options["select_models"] = [*models_map.keys()]
+
+            print(f"Models Map: {models_map}")
+            context.log.info(f"Models Map: {models_map}")
+
+            print(f"DAG: {dag.graph}")
+            context.log.info(f"DAG: {dag.graph}")
 
             event_handler = DagsterSQLMeshEventHandler(
                 context, models_map, dag, "sqlmesh: "
