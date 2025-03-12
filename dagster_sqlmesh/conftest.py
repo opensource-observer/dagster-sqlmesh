@@ -151,8 +151,7 @@ class SQLMeshTestContext:
 
         for event in controller.plan_and_run(
             environment,
-            plan_options=plan_options,
-            run_options=run_options,
+            plan_and_run_options={"plan": plan_options, "run": run_options},
         ):
             recorder(event)
 

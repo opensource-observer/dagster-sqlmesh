@@ -29,10 +29,18 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="SQLMeshController")
 
 
-class PlanOptions(t.TypedDict):
+class PlanRunSharedOptions(t.TypedDict):
+    """Options shared between plan and run operations"""
+
     start: t.NotRequired[TimeLike]
     end: t.NotRequired[TimeLike]
     execution_time: t.NotRequired[TimeLike]
+    select_models: t.NotRequired[t.Collection[str]]
+
+
+class PlanOnlyOptions(t.TypedDict):
+    """Options specific ONLY to plan operations"""
+
     create_from: t.NotRequired[str]
     skip_tests: t.NotRequired[bool]
     restate_models: t.NotRequired[t.Iterable[str]]
@@ -43,20 +51,33 @@ class PlanOptions(t.TypedDict):
     no_auto_categorization: t.NotRequired[bool]
     effective_from: t.NotRequired[TimeLike]
     include_unmodified: t.NotRequired[bool]
-    select_models: t.NotRequired[t.Collection[str]]
     backfill_models: t.NotRequired[t.Collection[str]]
     categorizer_config: t.NotRequired[CategorizerConfig]
     enable_preview: t.NotRequired[bool]
     run: t.NotRequired[bool]
 
 
-class RunOptions(t.TypedDict):
-    start: t.NotRequired[TimeLike]
-    end: t.NotRequired[TimeLike]
-    execution_time: t.NotRequired[TimeLike]
+class RunOnlyOptions(t.TypedDict):
+    """Options specific ONLY to run operations"""
+
     skip_janitor: t.NotRequired[bool]
     ignore_cron: t.NotRequired[bool]
-    select_models: t.NotRequired[t.Collection[str]]
+
+
+class PlanOptions(PlanOnlyOptions, PlanRunSharedOptions):
+    pass
+
+
+class RunOptions(RunOnlyOptions, PlanRunSharedOptions):
+    pass
+
+
+class PlanAndRunOptions(t.TypedDict):
+    """Combined options for plan_and_run operations"""
+
+    shared: t.NotRequired[PlanRunSharedOptions]
+    plan: t.NotRequired[PlanOnlyOptions]
+    run: t.NotRequired[RunOnlyOptions]
 
 
 @dataclass(kw_only=True)
@@ -277,11 +298,16 @@ class SQLMeshInstance:
         self,
         categorizer: SnapshotCategorizer | None = None,
         default_catalog: str | None = None,
-        plan_options: PlanOptions | None = None,
-        run_options: RunOptions | None = None,
+        plan_and_run_options: PlanAndRunOptions | None = None,
     ) -> t.Generator[ConsoleEvent, None, None]:
-        run_options = run_options or {}
-        plan_options = plan_options or {}
+        run_options: RunOptions = {}
+        plan_options: PlanOptions = {}
+
+        if plan_and_run_options is not None:
+            run_options.update(plan_and_run_options.get("run", {}))
+            plan_options.update(plan_and_run_options.get("plan", {}))
+            run_options.update(plan_and_run_options.get("shared", {}))
+            plan_options.update(plan_and_run_options.get("shared", {}))
 
         yield from self.plan(categorizer, default_catalog, **plan_options)
         yield from self.run(**run_options)
@@ -437,13 +463,11 @@ class SQLMeshController:
         environment: str,
         categorizer: SnapshotCategorizer | None = None,
         default_catalog: str | None = None,
-        plan_options: PlanOptions | None = None,
-        run_options: RunOptions | None = None,
+        plan_and_run_options: PlanAndRunOptions | None = None,
     ) -> t.Generator[ConsoleEvent, None, None]:
         with self.instance(environment, "plan_and_run") as mesh:
             yield from mesh.plan_and_run(
                 categorizer=categorizer,
                 default_catalog=default_catalog,
-                plan_options=plan_options,
-                run_options=run_options,
+                plan_and_run_options=plan_and_run_options,
             )

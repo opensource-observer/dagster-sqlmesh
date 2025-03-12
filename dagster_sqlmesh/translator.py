@@ -9,11 +9,12 @@ class SQLMeshDagsterTranslator:
     """Translates sqlmesh objects for dagster"""
 
     def get_asset_key_from_model(self, context: Context, model: Model) -> AssetKey:
-        return AssetKey(model.view_name)
+        table = self.get_fqn_to_table(context, model.name)
+        return AssetKey([part.name for part in table.parts])
 
     def get_asset_key_fqn(self, context: Context, fqn: str) -> AssetKey:
         table = self.get_fqn_to_table(context, fqn)
-        return AssetKey(table.name)
+        return AssetKey([part.name for part in table.parts])
 
     def get_fqn_to_table(self, context: Context, fqn: str) -> exp.Table:
         dialect = self.get_context_dialect(context)

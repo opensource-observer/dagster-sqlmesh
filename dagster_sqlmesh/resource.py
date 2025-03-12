@@ -18,10 +18,12 @@ from sqlmesh.core.context import Context as SQLMeshContext
 from sqlmesh.core.snapshot import Snapshot
 from sqlmesh.utils.dag import DAG
 
+from dagster_sqlmesh.controller.base import PlanAndRunOptions
+
 from . import console
 from .config import SQLMeshContextConfig
 from .controller import PlanOptions, RunOptions, SQLMeshController
-from .utils import sqlmesh_model_name_to_key
+from .utils import sqlmesh_model_name_to_asset_key, sqlmesh_model_name_to_key
 
 
 class MaterializationTracker:
@@ -121,6 +123,11 @@ class DagsterSQLMeshEventHandler:
         self._tracker = MaterializationTracker(dag.sorted[:], self._logger)
         self._stage = "plan"
 
+    def _model_name_to_asset_key(self, model_name: str) -> AssetKey:
+        asset_keys = self._context.repository_def.assets_defs_by_key.keys()
+        asset_keys_map = {key.to_user_string(): key for key in asset_keys}
+        return asset_keys_map[sqlmesh_model_name_to_asset_key(model_name)]
+
     def process_events(
         self, sqlmesh_context: SQLMeshContext, event: console.ConsoleEvent
     ) -> t.Iterable[MaterializeResult]:
@@ -133,11 +140,9 @@ class DagsterSQLMeshEventHandler:
                 notify = self._tracker.notify_queue_next()
                 continue
             model = self._models_map[completed_name]
-            output_key = sqlmesh_model_name_to_key(model.name)
-            asset_key = self._context.asset_key_for_output(output_key)
-            # asset_key = translator.get_asset_key_from_model(
-            #     controller.context, model
-            # )
+
+            asset_key = self._model_name_to_asset_key(model.name)
+
             yield MaterializeResult(
                 asset_key=asset_key,
                 metadata={
@@ -267,9 +272,31 @@ class SQLMeshResource(ConfigurableResource):
                 context, models_map, dag, "sqlmesh: "
             )
 
+            plan_and_run_options: PlanAndRunOptions = {
+                "shared": {
+                    "select_models": list(plan_options.get("select_models", []))
+                    + list(run_options.get("select_models", [])),
+                },
+                "plan": plan_options,
+                "run": run_options,
+            }
+
+            start = plan_options.get("start") or run_options.get("start")
+            if start:
+                plan_and_run_options["shared"]["start"] = start
+
+            end = plan_options.get("end") or run_options.get("end")
+            if end:
+                plan_and_run_options["shared"]["end"] = end
+
+            execution_time = plan_options.get("execution_time") or run_options.get(
+                "execution_time"
+            )
+            if execution_time:
+                plan_and_run_options["shared"]["execution_time"] = execution_time
+
             for event in mesh.plan_and_run(
-                plan_options=plan_options,
-                run_options=run_options,
+                plan_and_run_options=plan_and_run_options,
             ):
                 yield from event_handler.process_events(mesh.context, event)
 
@@ -321,12 +348,10 @@ class SQLMeshConcurrentResource(ConfigurableResource):
         self,
         context: AssetExecutionContext,
         environment: str = "dev",
-        plan_options: PlanOptions | None = None,
-        run_options: RunOptions | None = None,
+        plan_and_run_options: PlanAndRunOptions | None = None,
     ) -> t.Iterable[MaterializeResult]:
         """Execute SQLMesh based on the configuration given"""
-        plan_options = plan_options or {}
-        run_options = run_options or {}
+        plan_and_run_options = plan_and_run_options or {}
 
         logger = context.log
 
@@ -337,16 +362,17 @@ class SQLMeshConcurrentResource(ConfigurableResource):
             if context.selected_output_names:
                 models_map = {}
                 for key, model in models.items():
-                    if (
-                        sqlmesh_model_name_to_key(model.name)
-                        in context.selected_output_names
-                    ):
-                        models_map[key] = model
+                    # if (
+                    #     sqlmesh_model_name_to_key(model.name)
+                    #     in context.selected_output_names
+                    # ):
+                    models_map[key] = model
 
             dag = mesh.models_dag()
 
-            plan_options["select_models"] = [*models_map.keys()]
-            run_options["select_models"] = [*models_map.keys()]
+            if plan_and_run_options.get("select_models") is None:
+                plan_and_run_options["shared"] = {}
+                plan_and_run_options["shared"]["select_models"] = [*models_map.keys()]
 
             print(f"Models Map: {models_map}")
             context.log.info(f"Models Map: {models_map}")
@@ -359,8 +385,7 @@ class SQLMeshConcurrentResource(ConfigurableResource):
             )
 
             for event in mesh.plan_and_run(
-                plan_options=plan_options,
-                run_options=run_options,
+                plan_and_run_options=plan_and_run_options,
             ):
                 yield from event_handler.process_events(mesh.context, event)
 
