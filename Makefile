@@ -89,7 +89,7 @@ mypy:
 
 # Sample project commands
 clean-dagster:
-	rm -rf /tmp/dagster
+	rm -rf sample/dagster_project/storage sample/dagster_project/logs sample/dagster_project/history
 
 dagster-dev: clean-dagster
 	DAGSTER_HOME=$(CURDIR)/sample/dagster_project $(PYTHON_CMD) -m dagster dev -h 0.0.0.0 -w sample/dagster_project/workspace.yaml

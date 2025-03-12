@@ -332,8 +332,6 @@ class SQLMeshConcurrentResource(ConfigurableResource):
 
         controller = self.get_controller(logger)
         with controller.instance(environment) as mesh:
-            dag = mesh.models_dag()
-
             models = mesh.models()
             models_map = models.copy()
             if context.selected_output_names:
@@ -345,8 +343,7 @@ class SQLMeshConcurrentResource(ConfigurableResource):
                     ):
                         models_map[key] = model
 
-            full_dag = mesh.models_dag()
-            dag = full_dag.prune(*models_map.keys())
+            dag = mesh.models_dag()
 
             plan_options["select_models"] = [*models_map.keys()]
             run_options["select_models"] = [*models_map.keys()]
