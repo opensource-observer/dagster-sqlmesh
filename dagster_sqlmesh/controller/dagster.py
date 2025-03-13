@@ -34,7 +34,7 @@ class DagsterSQLMeshController(SQLMeshController):
                 if not model:
                     # If no model is returned this seems to be an asset dependency
                     continue
-                asset_out = translator.get_asset_key_from_model(
+                asset_key = translator.get_asset_key_from_model(
                     context,
                     model,
                 )
@@ -43,6 +43,8 @@ class DagsterSQLMeshController(SQLMeshController):
                     for dep in deps
                 ]
                 internal_asset_deps: t.Set[AssetKey] = set()
+                asset_tags = translator.get_tags(context, model)
+
                 for dep in model_deps:
                     if dep.model:
                         internal_asset_deps.add(
@@ -55,7 +57,9 @@ class DagsterSQLMeshController(SQLMeshController):
                         # create an external dep
                         depsMap[table.name] = AssetDep(key)
                 model_key = sqlmesh_model_name_to_key(model.name)
-                output.outs[model_key] = AssetOut(key=asset_out, is_required=False)
+                output.outs[model_key] = AssetOut(
+                    key=asset_key, tags=asset_tags, is_required=False
+                )
                 output.internal_asset_deps[model_key] = internal_asset_deps
 
             output.deps = list(depsMap.values())
