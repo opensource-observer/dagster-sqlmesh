@@ -51,6 +51,9 @@ clean:
 test:
 	$(PYTHON_CMD) -m pytest -vv --log-cli-level=INFO $(filter-out $@,$(MAKECMDGOALS))
 
+pyright:
+	pnpm pyright
+
 # Sample project commands
 
 dagster-dev: clean-dagster

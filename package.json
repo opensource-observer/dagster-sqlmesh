@@ -12,7 +12,7 @@
   "scripts": {
     "build": "turbo run build --concurrency=100%",
     "format:staged": "lint-staged",
-    "pyright": "pyright --pythonpath $(poetry env info --path)/bin/python",
+    "pyright": "pyright --pythonpath .venv/bin/python",
     "prepare": "husky install"
   },
   "devDependencies": {
