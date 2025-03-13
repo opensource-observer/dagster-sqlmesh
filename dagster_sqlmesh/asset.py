@@ -25,6 +25,8 @@ def sqlmesh_assets(
     op_tags: t.Optional[t.Mapping[str, t.Any]] = None,
     required_resource_keys: t.Optional[t.Set[str]] = None,
     retry_policy: t.Optional[RetryPolicy] = None,
+    # For now we don't set this by default
+    enabled_subsetting: bool = False,
 ):
     controller = DagsterSQLMeshController.setup_with_config(config)
     if not dagster_sqlmesh_translator:
@@ -39,5 +41,6 @@ def sqlmesh_assets(
         op_tags=op_tags,
         compute_kind=compute_kind,
         retry_policy=retry_policy,
+        can_subset=enabled_subsetting,
         required_resource_keys=required_resource_keys,
     )
