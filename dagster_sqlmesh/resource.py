@@ -120,22 +120,27 @@ class DagsterSQLMeshEventHandler:
         notify = self._tracker.notify_queue_next()
         while notify is not None:
             completed_name, update_status = notify
+
+            # If the model is not in the context, we can skip any notification
+            # This will happen for external models
             if not sqlmesh_context.get_model(completed_name):
                 notify = self._tracker.notify_queue_next()
                 continue
-            model = self._models_map[completed_name]
-            output_key = sqlmesh_model_name_to_key(model.name)
-            asset_key = self._context.asset_key_for_output(output_key)
-            # asset_key = translator.get_asset_key_from_model(
-            #     controller.context, model
-            # )
-            yield MaterializeResult(
-                asset_key=asset_key,
-                metadata={
-                    "updated": update_status,
-                    "duration_ms": 0,
-                },
-            )
+
+            model = self._models_map.get(completed_name)
+
+            # We allow selecting models. That value is mapped to models_map.
+            # If the model is not in models_map, we can skip any notification
+            if model:
+                output_key = sqlmesh_model_name_to_key(model.name)
+                asset_key = self._context.asset_key_for_output(output_key)
+                yield MaterializeResult(
+                    asset_key=asset_key,
+                    metadata={
+                        "updated": update_status,
+                        "duration_ms": 0,
+                    },
+                )
             notify = self._tracker.notify_queue_next()
 
     def report_event(self, event: console.ConsoleEvent):
@@ -189,14 +194,14 @@ class DagsterSQLMeshEventHandler:
                     raise Exception("sqlmesh failed during run")
             case console.LogError(message):
                 log_context.error(
-                    message,
+                    f"sqlmesh reported an error: {message}",
                 )
             case console.LogFailedModels(models):
-                log_context.error(
-                    "\n".join(
+                if len(models) != 0:
+                    failed_models = "\n".join(
                         [f"{str(model)}\n{str(model.__cause__)}" for model in models]
-                    ),
-                )
+                    )
+                    log_context.error(f"sqlmesh failed models: {failed_models}")
             case _:
                 log_context.debug("Received event")
 
@@ -244,6 +249,8 @@ class SQLMeshResource(ConfigurableResource):
             dag = mesh.models_dag()
 
             plan_options["select_models"] = []
+            plan_options["backfill_models"] = []
+            run_options["select_models"] = []
 
             models = mesh.models()
             models_map = models.copy()
@@ -254,7 +261,12 @@ class SQLMeshResource(ConfigurableResource):
                         sqlmesh_model_name_to_key(model.name)
                         in context.selected_output_names
                     ):
+                        logger.info(f"selected model: {model.name}")
+
                         models_map[key] = model
+                        plan_options["select_models"].append(model.name)
+                        plan_options["backfill_models"].append(model.name)
+                        run_options["select_models"].append(model.name)
 
             event_handler = DagsterSQLMeshEventHandler(
                 context, models_map, dag, "sqlmesh: "

@@ -73,7 +73,7 @@ class ConsoleGenerator:
         while thread.is_alive() or not self._queue.empty():
             try:
                 # Get arguments from the queue with a timeout
-                args = self._queue.get(timeout=0.1)
+                args = self._queue.get(timeout=0.5)
                 yield args
             except queue.Empty:
                 continue
