@@ -6,21 +6,11 @@ PYTHON_VENV_NAME := ".venv"
 VENV_NAME := .venv
 PYTHON := python
 
-# Check if we're on Windows
-ifeq ($(OS),Windows_NT)
-    PYTHON_CMD := $(CURDIR)/$(VENV_NAME)/Scripts/python
-    SQLMESH_CMD := $(CURDIR)/$(VENV_NAME)/Scripts/sqlmesh
-    UV_CMD := "$(subst \,/,$(USERPROFILE))/.local/bin/uv.exe"
-    ACTIVATE := source $(CURDIR)/$(VENV_NAME)/Scripts/activate
-    DEACTIVATE := source $(CURDIR)/$(VENV_NAME)/Scripts/deactivate
-else
-    PYTHON_CMD := $(CURDIR)/$(VENV_NAME)/bin/python
-    SQLMESH_CMD := $(CURDIR)/$(VENV_NAME)/bin/sqlmesh
-    UV_CMD := uv
-    ACTIVATE := source $(CURDIR)/$(VENV_NAME)/bin/activate
-    DEACTIVATE := deactivate
-endif
-
+PYTHON_CMD := $(CURDIR)/$(VENV_NAME)/bin/python
+SQLMESH_CMD := $(CURDIR)/$(VENV_NAME)/bin/sqlmesh
+UV_CMD := uv
+ACTIVATE := source $(CURDIR)/$(VENV_NAME)/bin/activate
+DEACTIVATE := deactivate
 
 init-python:
 	@if [ ! -d "$(PYTHON_VENV_NAME)" ]; then \
