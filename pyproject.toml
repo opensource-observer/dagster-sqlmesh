@@ -40,4 +40,40 @@ exclude = [
     "**/.idea",
     "**/.pytest_cache",    
 ]
+pythonVersion = "3.11"
+reportUnknownParameterType = true
+reportMissingTypeStubs = false
+reportUnusedImports = true
+reportUnnecessaryTypeIgnoreComment = true
+useLibraryCodeForTypes = true
+reportMissingReturnType = true
+reportIncompleteStub = true
+reportUntypedFunctionDecorator = false
 
+[tool.ruff.lint]
+# Ignore E402: Module level import not at top of file
+ignore = ["E402", "E712"]
+select = [
+    'I001',    # isort
+    "E4",      # pycodestyle errors
+    "E7",      # pycodestyle errors
+    "E9",      # pycodestyle errors
+    "F",       # pyflakes
+    "F401",    # unused imports
+    "F403",    # star imports usage
+    "F405",    # star imports usage
+    "F821",    # undefined names
+    "UP",      # pyupgrade (modernize Python code)
+    "RUF"      # ruff-specific rules
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["dagster_sqlmesh"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+combine-as-imports = true
+split-on-trailing-comma = true

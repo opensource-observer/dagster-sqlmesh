@@ -1,20 +1,20 @@
-import typing as t
 import logging
+import typing as t
 
 from dagster import (
-    ConfigurableResource,
     AssetExecutionContext,
+    ConfigurableResource,
     MaterializeResult,
 )
 from sqlmesh import Model
-from sqlmesh.utils.dag import DAG
-from sqlmesh.core.snapshot import Snapshot
 from sqlmesh.core.context import Context as SQLMeshContext
+from sqlmesh.core.snapshot import Snapshot
+from sqlmesh.utils.dag import DAG
 
-from .utils import sqlmesh_model_name_to_key
-from .config import SQLMeshContextConfig
-from .controller import SQLMeshController, PlanOptions, RunOptions
 from . import console
+from .config import SQLMeshContextConfig
+from .controller import PlanOptions, RunOptions, SQLMeshController
+from .utils import sqlmesh_model_name_to_key
 
 
 class MaterializationTracker:
@@ -22,17 +22,17 @@ class MaterializationTracker:
     order. This is necessary because sqlmesh may skip some materializations that
     have no changes and those will be reported as completed out of order."""
 
-    def __init__(self, sorted_dag: t.List[str], logger: logging.Logger):
+    def __init__(self, sorted_dag: list[str], logger: logging.Logger):
         self.logger = logger
-        self._batches: t.Dict[Snapshot, int] = {}
-        self._count: t.Dict[Snapshot, int] = {}
-        self._complete_update_status: t.Dict[str, bool] = {}
+        self._batches: dict[Snapshot, int] = {}
+        self._count: dict[Snapshot, int] = {}
+        self._complete_update_status: dict[str, bool] = {}
         self._sorted_dag = sorted_dag
         self._current_index = 0
 
-    def plan(self, batches: t.Dict[Snapshot, int]):
+    def plan(self, batches: dict[Snapshot, int]):
         self._batches = batches
-        self._count: t.Dict[Snapshot, int] = {}
+        self._count: dict[Snapshot, int] = {}
 
         incomplete_names = set()
         for snapshot, count in self._batches.items():
@@ -53,7 +53,7 @@ class MaterializationTracker:
             self._complete_update_status[snapshot.name] = True
         return (current_count, expected_count)
 
-    def notify_queue_next(self) -> t.Tuple[str, bool] | None:
+    def notify_queue_next(self) -> tuple[str, bool] | None:
         if self._current_index >= len(self._sorted_dag):
             return None
         check_name = self._sorted_dag[self._current_index]
@@ -72,24 +72,24 @@ class SQLMeshEventLogContext:
         self._handler = handler
         self._event = event
 
-    def ensure_standard_obj(self, obj: t.Optional[t.Dict[str, t.Any]]):
+    def ensure_standard_obj(self, obj: dict[str, t.Any] | None):
         obj = obj or {}
         obj["_event_type"] = self.event_name
         return obj
 
-    def info(self, message: str, obj: t.Optional[t.Dict[str, t.Any]] = None):
+    def info(self, message: str, obj: dict[str, t.Any] | None = None):
         self.log("info", message, obj)
 
-    def debug(self, message: str, obj: t.Optional[t.Dict[str, t.Any]] = None):
+    def debug(self, message: str, obj: dict[str, t.Any] | None = None):
         self.log("debug", message, obj)
 
-    def warning(self, message: str, obj: t.Optional[t.Dict[str, t.Any]] = None):
+    def warning(self, message: str, obj: dict[str, t.Any] | None = None):
         self.log("warning", message, obj)
 
-    def error(self, message: str, obj: t.Optional[t.Dict[str, t.Any]] = None):
+    def error(self, message: str, obj: dict[str, t.Any] | None = None):
         self.log("error", message, obj)
 
-    def log(self, level: str | int, message: str, obj: t.Optional[t.Dict[str, t.Any]]):
+    def log(self, level: str | int, message: str, obj: dict[str, t.Any] | None):
         self._handler.log(level, message, self.ensure_standard_obj(obj))
 
     @property
@@ -101,8 +101,8 @@ class DagsterSQLMeshEventHandler:
     def __init__(
         self,
         context: AssetExecutionContext,
-        models_map: t.Dict[str, Model],
-        dag: DAG,
+        models_map: dict[str, Model],
+        dag: DAG[t.Any],
         prefix: str,
     ):
         self._models_map = models_map
@@ -193,9 +193,7 @@ class DagsterSQLMeshEventHandler:
                 )
             case console.LogFailedModels(models):
                 log_context.error(
-                    "\n".join(
-                        [f"{str(model)}\n{str(model.__cause__)}" for model in models]
-                    ),
+                    "\n".join([f"{model!s}\n{model.__cause__!s}" for model in models]),
                 )
             case _:
                 log_context.debug("Received event")
@@ -207,7 +205,7 @@ class DagsterSQLMeshEventHandler:
         self,
         level: str | int,
         message: str,
-        obj: t.Optional[t.Dict[str, t.Any]] = None,
+        obj: dict[str, t.Any] | None = None,
     ):
         if level == "error":
             self._logger.error(message)
@@ -230,8 +228,8 @@ class SQLMeshResource(ConfigurableResource):
         self,
         context: AssetExecutionContext,
         environment: str = "dev",
-        plan_options: t.Optional[PlanOptions] = None,
-        run_options: t.Optional[RunOptions] = None,
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
     ) -> t.Iterable[MaterializeResult]:
         """Execute SQLMesh based on the configuration given"""
         plan_options = plan_options or {}
@@ -266,7 +264,7 @@ class SQLMeshResource(ConfigurableResource):
             ):
                 yield from event_handler.process_events(mesh.context, event)
 
-    def get_controller(self, log_override: t.Optional[logging.Logger] = None):
+    def get_controller(self, log_override: logging.Logger | None = None) -> SQLMeshController:
         return SQLMeshController.setup_with_config(
             self.config, log_override=log_override
         )

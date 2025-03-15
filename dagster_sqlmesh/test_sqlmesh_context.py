@@ -1,6 +1,7 @@
 import logging
 
 import polars
+
 from .conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)

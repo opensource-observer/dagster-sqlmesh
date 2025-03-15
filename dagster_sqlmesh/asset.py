@@ -1,9 +1,9 @@
-import typing as t
 import logging
+import typing as t
 
 from dagster import (
-    multi_asset,
     RetryPolicy,
+    multi_asset,
 )
 
 from dagster_sqlmesh.controller import DagsterSQLMeshController
@@ -19,12 +19,12 @@ def sqlmesh_assets(
     *,
     environment: str,
     config: SQLMeshContextConfig,
-    name: t.Optional[str] = None,
-    dagster_sqlmesh_translator: t.Optional[SQLMeshDagsterTranslator] = None,
+    name: str | None = None,
+    dagster_sqlmesh_translator: SQLMeshDagsterTranslator | None = None,
     compute_kind: str = "sqlmesh",
-    op_tags: t.Optional[t.Mapping[str, t.Any]] = None,
-    required_resource_keys: t.Optional[t.Set[str]] = None,
-    retry_policy: t.Optional[RetryPolicy] = None,
+    op_tags: t.Mapping[str, t.Any] | None = None,
+    required_resource_keys: set[str] | None = None,
+    retry_policy: RetryPolicy | None = None,
 ):
     controller = DagsterSQLMeshController.setup_with_config(config)
     if not dagster_sqlmesh_translator:
