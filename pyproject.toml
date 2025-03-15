@@ -28,3 +28,16 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pyright]
+exclude = [
+    ".venv",
+    "**/.venv",
+    "node_modules",
+    "**/.git",
+    "**/.github",
+    "**/.vscode",
+    "**/.idea",
+    "**/.pytest_cache",    
+]
+
