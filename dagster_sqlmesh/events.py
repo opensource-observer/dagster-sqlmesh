@@ -18,7 +18,7 @@ def show_plan_summary(
     plan: Plan,
     snapshot_selector: Callable[[SnapshotInfoLike], bool],
     ignored_snapshot_ids: set[SnapshotId] | None = None,
-):
+) -> None:
     context_diff = plan.context_diff
     ignored_snapshot_ids = ignored_snapshot_ids or set()
     selected_snapshots = {
@@ -63,10 +63,10 @@ def show_plan_summary(
 
 class ConsoleGenerator:
     def __init__(self, log_override: logging.Logger | None = None):
-        self._queue = queue.Queue()
+        self._queue: queue.Queue[console.ConsoleEvent] = queue.Queue()
         self.logger = log_override or logger
 
-    def __call__(self, event: console.ConsoleEvent):
+    def __call__(self, event: console.ConsoleEvent) -> None:
         self._queue.put(event)
 
     def events(self, thread: threading.Thread) -> Iterator[console.ConsoleEvent]:
@@ -91,7 +91,7 @@ class ConsoleRecorder:
         self._successful = False
         self._enable_unknown_event_logging = enable_unknown_event_logging
 
-    def __call__(self, event: console.ConsoleEvent):
+    def __call__(self, event: console.ConsoleEvent) -> None:
         match event:
             case console.StartPlanEvaluation(evaluatable_plan):
                 self.logger.debug("Starting plan evaluation")
@@ -132,7 +132,7 @@ class ConsoleRecorder:
         plan: Plan,
         snapshot_selector: Callable[[SnapshotInfoLike], bool],
         ignored_snapshot_ids: set[SnapshotId] | None = None,
-    ):
+    ) -> None:
         return show_plan_summary(
             self.logger, plan, snapshot_selector, ignored_snapshot_ids
         )

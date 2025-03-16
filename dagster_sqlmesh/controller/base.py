@@ -10,6 +10,7 @@ from sqlmesh.core.config import CategorizerConfig
 from sqlmesh.core.console import Console, set_console
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
+from sqlmesh.core.plan import Plan, PlanBuilder
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 
@@ -132,6 +133,54 @@ class SQLMeshInstance:
         yield
         self.console.remove_handler(id)
 
+    def _get_plan_summary(self, plan: Plan) -> str:
+        """
+        Get a summary of the plan and return it as a string.
+
+        Args:
+            plan (Plan): The plan to summarize.
+
+        Returns:
+            str: A summary of the plan.
+        """
+        directly_modified = len(plan.directly_modified)
+        indirectly_modified = sum(
+            len(deps) for deps in plan.indirectly_modified.values()
+        )
+
+        plan_summary = [
+            "SQLMesh Plan Summary:",
+            f"• Models: {directly_modified} direct changes, {indirectly_modified} indirect changes",
+            f"• Time Range: {plan.provided_start or 'default'} → {plan.provided_end or 'default'}",
+            "• Configuration:",
+            f"  - Skip Backfill: {plan.skip_backfill}",
+            f"  - Forward Only: {plan.forward_only}",
+            f"  - No Gaps: {plan.no_gaps}",
+            f"  - Include Unmodified: {plan.include_unmodified}",
+            f"  - Empty Backfill: {plan.empty_backfill}",
+            f"  - End Bounded: {plan.end_bounded}",
+            f"  - Is Dev Environment: {plan.is_dev}",
+        ]
+
+        if plan.skip_backfill:
+            plan_summary.append("• Backfill: DISABLED (skip_backfill=True)")
+        else:
+            plan_summary.append("• Backfill:")
+            if plan.selected_models_to_backfill:
+                plan_summary.append(
+                    f"  - User Selected: {sorted(plan.selected_models_to_backfill)}"
+                )
+            if plan.models_to_backfill:
+                additional = plan.models_to_backfill - (
+                    plan.selected_models_to_backfill or set()
+                )
+                if additional:
+                    plan_summary.append(f"  - Auto-detected: {sorted(additional)}")
+            if not (plan.selected_models_to_backfill or plan.models_to_backfill):
+                plan_summary.append("  - None required")
+
+        return "\n".join(plan_summary)
+
     def plan(
         self,
         categorizer: SnapshotCategorizer | None = None,
@@ -170,14 +219,20 @@ class SQLMeshInstance:
             environment: str,
             plan_options: PlanOptions,
             default_catalog: str,
-        ) -> None:
+        ) -> Plan | None:
             logger.debug("dagster-sqlmesh: thread started")
             try:
-                builder = context.plan_builder(
+                builder: PlanBuilder = context.plan_builder(
                     environment=environment,
                     **plan_options,
                 )
+
+                plan: Plan = builder.build()
+                plan_str = self._get_plan_summary(plan)
+
                 logger.debug("dagster-sqlmesh: plan")
+                logger.info(f"Plan Summary: {plan_str}")
+
                 controller.console.plan(
                     builder,
                     auto_apply=True,
