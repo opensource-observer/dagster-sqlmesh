@@ -336,6 +336,7 @@ class EventConsole(Console):
         self._handlers: dict[str, ConsoleEventHandler] = {}
         self.logger = log_override or logger
         self.id = str(uuid.uuid4())
+        self.logger.debug(f"EventConsole[{self.id}]: created")
         self.categorizer = None
 
     def add_snapshot_categorizer(self, categorizer: SnapshotCategorizer) -> None:
@@ -460,7 +461,9 @@ class EventConsole(Console):
         no_diff: bool = False,
         no_prompts: bool = False,
     ) -> None:
+        self.logger.debug("building plan created")
         plan = plan_builder.build()
+        self.logger.debug(f"plan created: {plan}")
 
         for snapshot in plan.uncategorized:
             if self.categorizer:

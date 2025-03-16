@@ -1,11 +1,11 @@
-from typing import List, Optional, Set, Callable, Iterator
 import logging
 import queue
 import threading
+from collections.abc import Callable, Iterator
 
 from sqlmesh.core.model import Model
-from sqlmesh.core.snapshot import SnapshotInfoLike, SnapshotId, Snapshot
 from sqlmesh.core.plan import Plan
+from sqlmesh.core.snapshot import Snapshot, SnapshotId, SnapshotInfoLike
 
 from dagster_sqlmesh import console
 
@@ -17,7 +17,7 @@ def show_plan_summary(
     logger: logging.Logger,
     plan: Plan,
     snapshot_selector: Callable[[SnapshotInfoLike], bool],
-    ignored_snapshot_ids: Optional[Set[SnapshotId]] = None,
+    ignored_snapshot_ids: set[SnapshotId] | None = None,
 ):
     context_diff = plan.context_diff
     ignored_snapshot_ids = ignored_snapshot_ids or set()
@@ -44,7 +44,7 @@ def show_plan_summary(
         for _, (current_snapshot, _) in context_diff.modified_snapshots.items()
         if snapshot_selector(current_snapshot)
     } - selected_ignored_snapshot_ids
-    restated_snapshots: List[SnapshotInfoLike] = [
+    restated_snapshots: list[SnapshotInfoLike] = [
         context_diff.snapshots[snap_id] for snap_id in plan.restatements.keys()
     ]
 
@@ -62,7 +62,7 @@ def show_plan_summary(
 
 
 class ConsoleGenerator:
-    def __init__(self, log_override: Optional[logging.Logger] = None):
+    def __init__(self, log_override: logging.Logger | None = None):
         self._queue = queue.Queue()
         self.logger = log_override or logger
 
@@ -73,7 +73,7 @@ class ConsoleGenerator:
         while thread.is_alive() or not self._queue.empty():
             try:
                 # Get arguments from the queue with a timeout
-                args = self._queue.get(timeout=0.1)
+                args = self._queue.get(timeout=0.5)
                 yield args
             except queue.Empty:
                 continue
@@ -82,12 +82,12 @@ class ConsoleGenerator:
 class ConsoleRecorder:
     def __init__(
         self,
-        log_override: Optional[logging.Logger] = None,
+        log_override: logging.Logger | None = None,
         enable_unknown_event_logging: bool = True,
     ):
         self.logger = log_override or logger
-        self._planned_models: List[Model] = []
-        self._updated: List[Snapshot] = []
+        self._planned_models: list[Model] = []
+        self._updated: list[Snapshot] = []
         self._successful = False
         self._enable_unknown_event_logging = enable_unknown_event_logging
 
@@ -131,7 +131,7 @@ class ConsoleRecorder:
         self,
         plan: Plan,
         snapshot_selector: Callable[[SnapshotInfoLike], bool],
-        ignored_snapshot_ids: Optional[Set[SnapshotId]] = None,
+        ignored_snapshot_ids: set[SnapshotId] | None = None,
     ):
         return show_plan_summary(
             self.logger, plan, snapshot_selector, ignored_snapshot_ids

@@ -171,6 +171,7 @@ class SQLMeshInstance:
             plan_options: PlanOptions,
             default_catalog: str,
         ) -> None:
+            logger.debug("dagster-sqlmesh: thread started")
             try:
                 builder = context.plan_builder(
                     environment=environment,
@@ -184,6 +185,8 @@ class SQLMeshInstance:
                 )
             except Exception as e:
                 controller.console.exception(e)
+            except:  # noqa: E722
+                controller.console.exception(Exception("Unknown error during plan"))
 
         generator = ConsoleGenerator(self.logger)
 
@@ -191,6 +194,7 @@ class SQLMeshInstance:
             self.console.add_snapshot_categorizer(categorizer)
 
         with self.console_context(generator):
+            self.logger.debug("starting sqlmesh plan thread")
             thread = threading.Thread(
                 target=run_sqlmesh_thread,
                 args=(
@@ -204,6 +208,7 @@ class SQLMeshInstance:
             )
             thread.start()
 
+            self.logger.debug("waiting for events")
             for event in generator.events(thread):
                 match event:
                     case ConsoleException(e):
@@ -249,6 +254,8 @@ class SQLMeshInstance:
                 context.run(environment=environment, **run_options)
             except Exception as e:
                 controller.console.exception(e)
+            except:  # noqa: E722
+                controller.console.exception(Exception("Unknown error during plan"))
 
         generator = ConsoleGenerator(self.logger)
         with self.console_context(generator):
@@ -283,8 +290,17 @@ class SQLMeshInstance:
         run_options = run_options or {}
         plan_options = plan_options or {}
 
-        yield from self.plan(categorizer, default_catalog, **plan_options)
-        yield from self.run(**run_options)
+        try:
+            self.logger.debug("starting sqlmesh plan")
+            yield from self.plan(categorizer, default_catalog, **plan_options)
+            self.logger.debug("starting sqlmesh run")
+            yield from self.run(**run_options)
+        except Exception as e:
+            self.logger.error(f"Error during sqlmesh plan and run: {e}")
+            raise e
+        except:
+            self.logger.error("Error during sqlmesh plan and run")
+            raise
 
     def models(self) -> MappingProxyType[str, Model]:
         return self.context.models

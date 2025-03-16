@@ -1,3 +1,4 @@
+
 import sqlglot
 from dagster import AssetKey
 from sqlglot import exp
@@ -9,27 +10,22 @@ class SQLMeshDagsterTranslator:
     """Translates sqlmesh objects for dagster"""
 
     def get_asset_key_from_model(self, context: Context, model: Model) -> AssetKey:
+        """Given the sqlmesh context and a model return the asset key"""
         return AssetKey(model.view_name)
 
     def get_asset_key_fqn(self, context: Context, fqn: str) -> AssetKey:
+        """Given the sqlmesh context and a fqn of a model return an asset key"""
         table = self.get_fqn_to_table(context, fqn)
         return AssetKey(table.name)
 
     def get_fqn_to_table(self, context: Context, fqn: str) -> exp.Table:
-        dialect = self.get_context_dialect(context)
+        """Given the sqlmesh context and a fqn return the table"""
+        dialect = self._get_context_dialect(context)
         return sqlglot.to_table(fqn, dialect=dialect)
 
-    def get_context_dialect(self, context: Context) -> str:
+    def _get_context_dialect(self, context: Context) -> str:
         return context.engine_adapter.dialect
 
-    # def get_asset_deps(
-    #     self, context: Context, model: Model, deps: List[SQLMeshModelDep]
-    # ) -> List[AssetKey]:
-    #     asset_keys: List[AssetKey] = []
-    #     for dep in deps:
-    #         if dep.model:
-    #             asset_keys.append(AssetKey(dep.model.view_name))
-    #         else:
-    #             parsed_fqn = dep.parse_fqn()
-    #             asset_keys.append(AssetKey([parsed_fqn.view_name]))
-    #     return asset_keys
+    def get_tags(self, context: Context, model: Model) -> dict[str, str]:
+        """Given the sqlmesh context and a model return the tags for that model"""
+        return {k: "true" for k in model.tags}
