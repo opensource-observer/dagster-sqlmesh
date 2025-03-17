@@ -8,6 +8,7 @@ from dagster import (
 )
 from sqlmesh import Model
 from sqlmesh.utils.dag import DAG
+from sqlmesh.utils.date import TimeLike
 from sqlmesh.core.snapshot import Snapshot
 from sqlmesh.core.context import Context as SQLMeshContext
 
@@ -234,7 +235,11 @@ class SQLMeshResource(ConfigurableResource):
     def run(
         self,
         context: AssetExecutionContext,
+        *,
         environment: str = "dev",
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
+        restate_selected: bool = False,
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
     ) -> t.Iterable[MaterializeResult]:
@@ -248,9 +253,7 @@ class SQLMeshResource(ConfigurableResource):
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
 
-            plan_options["select_models"] = []
-            plan_options["backfill_models"] = []
-            run_options["select_models"] = []
+            select_models = []
 
             models = mesh.models()
             models_map = models.copy()
@@ -264,15 +267,17 @@ class SQLMeshResource(ConfigurableResource):
                         logger.info(f"selected model: {model.name}")
 
                         models_map[key] = model
-                        plan_options["select_models"].append(model.name)
-                        plan_options["backfill_models"].append(model.name)
-                        run_options["select_models"].append(model.name)
+                        select_models.append(model.name)
 
             event_handler = DagsterSQLMeshEventHandler(
                 context, models_map, dag, "sqlmesh: "
             )
 
             for event in mesh.plan_and_run(
+                start=start,
+                end=end,
+                select_models=select_models,
+                restate_selected=restate_selected,
                 plan_options=plan_options,
                 run_options=run_options,
             ):

@@ -7,6 +7,7 @@ from typing import Callable, Dict, Union
 
 from sqlglot.expressions import Alter
 from sqlmesh.core.console import Console
+from sqlmesh.core.model import Model
 from sqlmesh.core.context_diff import ContextDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.linter.rule import RuleViolation
@@ -563,8 +564,7 @@ class EventConsole(Console):
         self.publish(ShowTableDiffSummary(table_diff))
 
     def show_linter_violations(
-        self,
-        violations: list[RuleViolation],
+        self, violations: list[RuleViolation], model: Model, is_error: bool = False
     ) -> None:
         self.publish(LogWarning("Linting violations found", str(violations)))
 
