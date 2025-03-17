@@ -1,27 +1,43 @@
-[tool.poetry]
+[project]
 name = "dagster-sqlmesh"
 version = "0.8.0"
 description = ""
-authors = ["Reuven Gonzales <reuven@karibalabs.co>"]
-license = "Apache 2.0"
+authors = [
+    {name = "Reuven Gonzales", email = "reuven@karibalabs.co"}
+]
+license = {text = "Apache-2.0"}
 readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "dagster>=1.7.8",
+    "sqlmesh<1.0",
+    "pytest>=8.3.2",
+    "pyarrow>=18.0.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.13"
-dagster = "^1.7.8"
-sqlmesh = "<1.0"
-pytest = "^8.3.2"
-pyarrow = "^18.0.0"
-
-
-[tool.poetry.group.dev.dependencies]
-ipython = "^8.26.0"
-pdbpp = "^0.10.3"
-dagster-webserver = "^1.8.1"
-ruff = "^0.6.2"
-polars = "^1.5.0"
-dagster-duckdb-polars = "^0.24.2"
+[dependency-groups]
+dev = [
+    "ipython>=8.26.0",
+    "pdbpp>=0.10.3",
+    "dagster-webserver>=1.8.1",
+    "ruff>=0.6.2",
+    "polars>=1.5.0",
+    "dagster-duckdb-polars>=0.24.2",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pyright]
+exclude = [
+    ".venv",
+    "**/.venv",
+    "node_modules",
+    "**/.git",
+    "**/.github",
+    "**/.vscode",
+    "**/.idea",
+    "**/.pytest_cache",    
+]
+

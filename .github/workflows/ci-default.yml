@@ -52,11 +52,17 @@ jobs:
             - recursive: true
               args: [--frozen-lockfile, --strict-peer-dependencies]
 
-      - name: "Setup Python, Poetry and Dependencies"
-        uses: packetcoders/action-setup-cache-python-poetry@main
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version }}
-          poetry-version: 1.8.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras
 
       - name: Type Check (Python)
         run: |
@@ -64,13 +70,13 @@ jobs:
 
       - name: Lint (Python)
         run: |
-          poetry run ruff check
+          uv run ruff check
 
       - name: Test (Python)
         run: |
-          poetry run pytest
+          uv run pytest
 
       - name: Run the sample dagster project
         run: |
-          poetry run dagster job execute -f sample/dagster_project/definitions.py -j all_assets_job
+          uv run dagster job execute -f sample/dagster_project/definitions.py -j all_assets_job
       

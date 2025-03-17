@@ -1,22 +1,22 @@
-import typing as t
-from typing import Dict, Union, Callable
-from dataclasses import dataclass
-import uuid
-import unittest
 import logging
+import typing as t
+import unittest
+import uuid
+from dataclasses import dataclass
+from typing import Callable, Dict, Union
 
 from sqlglot.expressions import Alter
 from sqlmesh.core.console import Console
-from sqlmesh.core.plan import EvaluatablePlan
 from sqlmesh.core.context_diff import ContextDiff
-from sqlmesh.core.plan import PlanBuilder
-from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
+from sqlmesh.core.linter.rule import RuleViolation
+from sqlmesh.core.plan import EvaluatablePlan, PlanBuilder
 from sqlmesh.core.snapshot import (
     Snapshot,
     SnapshotChangeCategory,
     SnapshotInfoLike,
 )
+from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.utils.concurrency import NodeExecutionFailedError
 
 logger = logging.getLogger(__name__)
@@ -561,6 +561,12 @@ class EventConsole(Console):
 
     def show_table_diff_summary(self, table_diff: TableDiff) -> None:
         self.publish(ShowTableDiffSummary(table_diff))
+
+    def show_linter_violations(
+        self,
+        violations: list[RuleViolation],
+    ) -> None:
+        self.publish(LogWarning("Linting violations found", str(violations)))
 
 
 class DebugEventConsole(EventConsole):
