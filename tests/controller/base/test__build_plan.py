@@ -107,5 +107,89 @@ def test_given_selected_models_when_building_then_plan_shows_correct_model_selec
     assert directly_modified_models == fully_qualified_models
 
 
+def test_given_all_plan_options_when_building_then_plan_reflects_all_settings(
+    sample_sqlmesh_test_context: SQLMeshTestContext,
+) -> None:
+    """Test plan creation with all possible options set to verify complete configuration."""
+    controller = sample_sqlmesh_test_context.create_controller(
+        enable_debug_console=True
+    )
+
+    # Create a comprehensive set of plan options
+    plan_options = PlanOptions(
+        skip_backfill=True,
+        forward_only=True,
+        include_unmodified=True,
+        select_models=[
+            "sqlmesh_example.staging_model_1",
+            "sqlmesh_example.staging_model_3",
+        ],
+        no_gaps=True,
+        allow_destructive_models={
+            "sqlmesh_example.staging_model_1",
+            "sqlmesh_example.staging_model_3",
+        },
+        start="2024-01-01",
+        end="2024-01-02",
+        execution_time="2024-01-02",
+        effective_from="2024-01-01",
+        no_auto_categorization=True,
+        enable_preview=True,
+    )
+
+    with controller.instance("dev") as mesh:
+        builder = mesh._get_builder(
+            context=mesh.context,
+            environment="dev",
+            plan_options=plan_options,
+        )
+        plan = mesh._build_plan(
+            builder=builder,
+        )
+
+    # Basic plan properties
+    assert plan.is_dev is True
+    assert plan.skip_backfill is True
+    assert plan.forward_only is True
+    assert plan.include_unmodified is True
+    assert plan.end_bounded is True
+    assert plan.no_gaps is True
+
+    # Environment and timing properties
+    assert plan.provided_start == "2024-01-01"
+    assert plan.provided_end == "2024-01-02"
+    assert plan.execution_time == "2024-01-02"
+    assert plan.effective_from == "2024-01-01"
+
+    # Model selection and backfill properties
+    selected_models = plan.selected_models_to_backfill
+    assert selected_models is not None
+    assert len(selected_models) == 2
+    assert '"db"."sqlmesh_example"."staging_model_1"' in selected_models
+    assert '"db"."sqlmesh_example"."staging_model_3"' in selected_models
+
+    # Destructive models
+    assert plan.allow_destructive_models == {
+        '"db"."sqlmesh_example"."staging_model_1"',
+        '"db"."sqlmesh_example"."staging_model_3"',
+    }
+
+    # Verify computed properties have expected values
+    assert plan.start == "2024-01-01"  # Should match provided_start
+    assert plan.end == "2024-01-02"  # Should match provided_end
+    assert not plan.requires_backfill  # Should be False since skip_backfill is True
+    assert plan.has_changes  # Should be True since we selected models
+    assert (
+        not plan.has_unmodified_unpromoted
+    )  # Should be False since we're not including unmodified
+    assert len(plan.categorized) > 0  # Should have categorized models
+    assert len(plan.uncategorized) == 0  # Should have no uncategorized models
+    assert not plan.metadata_updated  # Should have no metadata updates
+    assert len(plan.new_snapshots) > 0  # Should have new snapshots
+    assert (
+        len(plan.missing_intervals) > 0
+    )  # Should have missing intervals even with skip_backfill
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

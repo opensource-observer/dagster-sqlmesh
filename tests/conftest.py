@@ -111,6 +111,8 @@ class SQLMeshTestContext:
         enable_debug_console: bool = False,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
         restate_models: list[str] | None = None,
     ) -> None:
         """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
@@ -133,10 +135,13 @@ class SQLMeshTestContext:
         controller = self.create_controller(enable_debug_console=enable_debug_console)
         recorder = ConsoleRecorder()
         # controller.add_event_handler(ConsoleRecorder())
-        plan_options = PlanOptions(
-            enable_preview=True,
-        )
-        run_options = RunOptions()
+        if plan_options is None:
+            plan_options = PlanOptions(
+                enable_preview=True,
+            )
+        if run_options is None:
+            run_options = RunOptions()
+        
         if execution_time:
             plan_options["execution_time"] = execution_time
             run_options["execution_time"] = execution_time
