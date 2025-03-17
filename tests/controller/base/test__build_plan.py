@@ -1,21 +1,12 @@
-import logging
-
 import pytest
 
 from dagster_sqlmesh.controller.base import PlanOptions
+from dagster_sqlmesh.utils import snapshot_id_to_model_name
 from tests.conftest import SQLMeshTestContext
-
-
-@pytest.fixture
-def logger() -> logging.Logger:
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    return logger
 
 
 def test_given_basic_plan_when_building_then_returns_expected_plan_properties(
     sample_sqlmesh_test_context: SQLMeshTestContext,
-    logger: logging.Logger,
 ) -> None:
     """Test basic plan creation with default options."""
     controller = sample_sqlmesh_test_context.create_controller(
@@ -43,7 +34,6 @@ def test_given_basic_plan_when_building_then_returns_expected_plan_properties(
 
 def test_given_skip_backfill_when_building_then_plan_reflects_backfill_status(
     sample_sqlmesh_test_context: SQLMeshTestContext,
-    logger: logging.Logger,
 ) -> None:
     """Test plan creation with skip_backfill option."""
     controller = sample_sqlmesh_test_context.create_controller(
@@ -69,7 +59,6 @@ def test_given_skip_backfill_when_building_then_plan_reflects_backfill_status(
 
 def test_given_selected_models_when_building_then_plan_shows_correct_model_selection(
     sample_sqlmesh_test_context: SQLMeshTestContext,
-    logger: logging.Logger,
 ) -> None:
     """Test plan creation with specific model selection."""
     controller = sample_sqlmesh_test_context.create_controller(
@@ -106,41 +95,16 @@ def test_given_selected_models_when_building_then_plan_shows_correct_model_selec
     # Verify the number of directly modified models matches
     assert len(plan.directly_modified) == len(selected_models)
 
-    # Log the model formats to help debug any mismatches
-    logger.debug(f"Selected models to backfill: {plan.selected_models_to_backfill}")
-    logger.debug(f"Directly modified models: {plan.directly_modified}")
+    print(f"Selected models to backfill: {plan.selected_models_to_backfill}")
+    print(f"Directly modified models: {plan.directly_modified}")
 
     # Extract just the model names from SnapshotId objects
     directly_modified_models = {
-        str(snapshot_id).split("<")[1].split(":")[0]  # Extract between < and :
-        for snapshot_id in plan.directly_modified
+        snapshot_id_to_model_name(snapshot_id) for snapshot_id in plan.directly_modified
     }
 
     # Verify the models appear in directly modified (they should be the same models)
     assert directly_modified_models == fully_qualified_models
-
-
-def test_given_exception_when_building_then_returns_none(
-    sample_sqlmesh_test_context: SQLMeshTestContext,
-    logger: logging.Logger,
-) -> None:
-    """Test error handling in plan creation."""
-    controller = sample_sqlmesh_test_context.create_controller(
-        enable_debug_console=True
-    )
-
-    with controller.instance("dev") as mesh:
-        # Force an error by providing an invalid model
-        builder = mesh._get_builder(
-            context=mesh.context,
-            environment="dev",
-            plan_options=PlanOptions(select_models=["non_existent_model"]),
-        )
-        plan = mesh._build_plan(
-            builder=builder,
-        )
-
-    assert plan is None
 
 
 if __name__ == "__main__":

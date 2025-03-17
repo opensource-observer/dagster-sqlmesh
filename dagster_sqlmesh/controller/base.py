@@ -192,32 +192,22 @@ class SQLMeshInstance:
     def _build_plan(
         self,
         builder: PlanBuilder,
-    ) -> Plan | None:
+    ) -> Plan:
         """Build a SQLMesh plan without applying it.
 
         Args:
-            logger: Logger instance for debug messages
-            context: SQLMesh context
-            environment: Target environment name
-            plan_options: Options for plan creation
+            builder: PlanBuilder instance to use for building the plan
 
         Returns:
-            Plan if successful, None if plan creation fails
+            Plan
         """
-        try:
-            plan: Plan = builder.build()
-            plan_str = self._get_plan_summary(plan)
+        plan: Plan = builder.build()
+        plan_str = self._get_plan_summary(plan)
 
-            logger.debug("dagster-sqlmesh: plan")
-            logger.info(f"Plan Summary: {plan_str}")
+        logger.debug("dagster-sqlmesh: plan")
+        logger.info(f"Plan Summary: {plan_str}")
 
-            return plan
-        except Exception as e:
-            self.console.exception(e)
-            return None
-        except:  # noqa: E722
-            self.console.exception(Exception("Unknown error during plan"))
-            return None
+        return plan
 
     def plan(
         self,
@@ -257,7 +247,7 @@ class SQLMeshInstance:
             environment: str,
             plan_options: PlanOptions,
             default_catalog: str,
-        ) -> Plan | None:
+        ) -> None:
             logger.debug("dagster-sqlmesh: thread started")
             try:
                 builder: PlanBuilder = self._get_builder(
@@ -266,12 +256,10 @@ class SQLMeshInstance:
                     plan_options=plan_options,
                 )
 
-                plan: Plan | None = self._build_plan(
+                plan: Plan = self._build_plan(
                     builder=builder,
                 )
-
-                if plan is not None:
-                    plan_str = self._get_plan_summary(plan)
+                plan_str = self._get_plan_summary(plan)
 
                 logger.debug("dagster-sqlmesh: plan")
                 logger.info(f"Plan Summary: {plan_str}")
