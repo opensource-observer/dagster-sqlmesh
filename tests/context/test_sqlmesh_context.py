@@ -1,8 +1,9 @@
 import logging
 
 import polars
+import pytest
 
-from .conftest import SQLMeshTestContext
+from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 
@@ -123,3 +124,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     """
     )
     assert test_source_model_count[0][0] == 6
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
