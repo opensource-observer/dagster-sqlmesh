@@ -70,8 +70,22 @@ class SQLMeshTestContext:
         return controller
 
     def query(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
-        conn = duckdb.connect(self.db_path)
-        return conn.sql(*args, **kwargs).fetchall()
+        """Execute a query against the test database.
+
+        Args:
+            *args: Arguments to pass to DuckDB's sql method
+            **kwargs: Keyword arguments to pass to DuckDB's sql method
+
+        Returns:
+            For SELECT queries: Query results as a list of tuples
+            For DDL/DML queries: None
+        """
+        with duckdb.connect(self.db_path) as conn:
+            result = conn.sql(*args, **kwargs)
+            # Only try to fetch results if it's a SELECT query
+            if result is not None:
+                return result.fetchall()
+            return None
 
     def initialize_test_source(self) -> None:
         conn = duckdb.connect(self.db_path)
@@ -141,7 +155,7 @@ class SQLMeshTestContext:
             )
         if run_options is None:
             run_options = RunOptions()
-        
+
         if execution_time:
             plan_options["execution_time"] = execution_time
             run_options["execution_time"] = execution_time

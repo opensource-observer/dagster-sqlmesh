@@ -3,6 +3,7 @@ import logging
 import polars
 import pytest
 
+from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,200 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     """
     )
     assert test_source_model_count[0][0] == 6
+
+
+def test_given_selective_models_when_planning_and_running_then_only_selected_models_update(
+    sample_sqlmesh_test_context: SQLMeshTestContext,
+):
+    """Test selective model execution with independent model path (staging_model_3)."""
+    # Initial run to set up all models
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+        start="2023-01-01",
+        end="2024-01-01",
+        execution_time="2024-01-02",
+    )
+
+    # Get initial counts
+    initial_staging_3_count = sample_sqlmesh_test_context.query(
+        "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_3"
+    )[0][0]
+
+    # Add new data to test source
+    sample_sqlmesh_test_context.append_to_test_source(
+        polars.DataFrame(
+            {
+                "id": [7, 8, 9],
+                "name": ["new_data", "new_data", "new_data"],
+            }
+        )
+    )
+
+    # Run with selective model execution
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+        end="2024-07-15",
+        execution_time="2024-07-15",
+        plan_options=PlanOptions(
+            select_models=["sqlmesh_example.staging_model_3"],
+            enable_preview=True,
+        ),
+        run_options=RunOptions(
+            select_models=["sqlmesh_example.staging_model_3"],
+        ),
+    )
+
+    # Verify only staging_model_3 was updated
+    final_staging_3_count = sample_sqlmesh_test_context.query(
+        "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_3"
+    )[0][0]
+    assert final_staging_3_count > initial_staging_3_count
+
+
+def test_given_dependent_models_when_backfill_settings_differ_then_behaves_correctly(
+    sample_sqlmesh_test_context: SQLMeshTestContext,
+):
+    """Test backfill behavior with dependent models (staging -> intermediate -> full).
+
+    Model chain:
+    1. staging_model_1 (INCREMENTAL_BY_TIME_RANGE) reads from seed_model_1
+       - Contains id, item_id, event_date
+    2. staging_model_2 (VIEW) reads from seed_model_2
+       - Contains id, item_name
+    3. intermediate_model_1 (INCREMENTAL_BY_TIME_RANGE)
+       - Joins staging_1 and staging_2 on id
+    4. full_model (FULL)
+       - Groups by item_id and counts distinct ids
+       - Count will remain same unless new item_ids are added to seed data
+    """
+    # Initial run to set up all models
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+        start="2023-01-01",
+        end="2024-01-01",
+        execution_time="2024-01-02",
+    )
+
+    # Get initial counts for the model chain
+    initial_counts = {
+        "staging_1": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
+        )[0][0],
+        "staging_2": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
+        )[0][0],
+        "intermediate": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
+        )[0][0],
+        "full": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
+        )[0][0],
+    }
+
+    # First test: skip_backfill=True should not propagate changes
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+        end="2024-07-15",
+        execution_time="2024-07-15",
+        plan_options=PlanOptions(
+            select_models=["sqlmesh_example.staging_model_1"],
+            skip_backfill=True,
+            enable_preview=True,
+        ),
+        run_options=RunOptions(
+            select_models=["sqlmesh_example.staging_model_1"],
+        ),
+    )
+
+    # Verify model states after skip_backfill run
+    skipped_backfill_counts = {
+        "staging_1": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
+        )[0][0],
+        "staging_2": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
+        )[0][0],
+        "intermediate": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
+        )[0][0],
+        "full": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
+        )[0][0],
+    }
+
+    # With skip_backfill=True:
+    # - staging_model_1 (incremental) should update since it was selected
+    assert skipped_backfill_counts["staging_1"] > initial_counts["staging_1"], (
+        "staging_model_1 should update with new data"
+    )
+    # - staging_model_2 (view) should remain unchanged since its source (seed_model_2) hasn't changed
+    assert skipped_backfill_counts["staging_2"] == initial_counts["staging_2"], (
+        "staging_model_2 should remain unchanged since seed_model_2 hasn't changed"
+    )
+    # - downstream models should not change due to skip_backfill
+    assert skipped_backfill_counts["intermediate"] == initial_counts["intermediate"], (
+        "intermediate should not change with skip_backfill"
+    )
+    assert skipped_backfill_counts["full"] == initial_counts["full"], (
+        "full model should not change with skip_backfill"
+    )
+
+    # Second test: with backfill enabled, changes should propagate through the chain
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+        end="2024-07-15",
+        execution_time="2024-07-15",
+        plan_options=PlanOptions(
+            select_models=[
+                "sqlmesh_example.staging_model_1",
+                "sqlmesh_example.intermediate_model_1",
+                "sqlmesh_example.full_model",
+            ],
+            skip_backfill=False,
+            enable_preview=True,
+        ),
+        run_options=RunOptions(
+            select_models=[
+                "sqlmesh_example.staging_model_1",
+                "sqlmesh_example.intermediate_model_1",
+                "sqlmesh_example.full_model",
+            ],
+        ),
+    )
+
+    # Verify changes propagated through the chain
+    final_counts = {
+        "staging_1": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
+        )[0][0],
+        "staging_2": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
+        )[0][0],
+        "intermediate": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
+        )[0][0],
+        "full": sample_sqlmesh_test_context.query(
+            "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
+        )[0][0],
+    }
+
+    # With backfill enabled:
+    # - staging_model_1 should have more records
+    assert final_counts["staging_1"] > initial_counts["staging_1"], (
+        "staging_model_1 should have new records"
+    )
+    # - staging_model_2 should remain unchanged since its source (seed_model_2) hasn't changed
+    assert final_counts["staging_2"] == initial_counts["staging_2"], (
+        "staging_model_2 should remain unchanged since seed_model_2 hasn't changed"
+    )
+    # - intermediate_model_1 should update since it depends on staging_model_1
+    assert final_counts["intermediate"] > initial_counts["intermediate"], (
+        "intermediate should update with backfill enabled"
+    )
+    # - full_model count should remain same since no new item_ids were added
+    assert final_counts["full"] == initial_counts["full"], (
+        "full model count should remain same since no new item_ids were added"
+    )
 
 
 if __name__ == "__main__":
