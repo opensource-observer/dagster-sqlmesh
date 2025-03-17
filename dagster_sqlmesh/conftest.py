@@ -106,7 +106,9 @@ class SQLMeshTestContext:
         enable_debug_console: bool = False,
         start: t.Optional[TimeLike] = None,
         end: t.Optional[TimeLike] = None,
-        restate_models: t.Optional[t.List[str]] = None,
+        select_models: t.Optional[t.List[str]] = None,
+        restate_selected: bool = False,
+        skip_run: bool = False,
     ):
         """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
 
@@ -135,19 +137,16 @@ class SQLMeshTestContext:
         if execution_time:
             plan_options["execution_time"] = execution_time
             run_options["execution_time"] = execution_time
-        if restate_models:
-            plan_options["restate_models"] = restate_models
-        if start:
-            plan_options["start"] = start
-            run_options["start"] = start
-        if end:
-            plan_options["end"] = end
-            run_options["end"] = end
 
         for event in controller.plan_and_run(
             environment,
+            start=start,
+            end=end,
+            select_models=select_models,
+            restate_selected=restate_selected,
             plan_options=plan_options,
             run_options=run_options,
+            skip_run=skip_run,
         ):
             recorder(event)
 

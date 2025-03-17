@@ -30,7 +30,7 @@ class PlanOptions(t.TypedDict):
     execution_time: t.NotRequired[TimeLike]
     create_from: t.NotRequired[str]
     skip_tests: t.NotRequired[bool]
-    restate_models: t.NotRequired[t.Iterable[str]]
+    restate_models: t.NotRequired[t.Collection[str]]
     no_gaps: t.NotRequired[bool]
     skip_backfill: t.NotRequired[bool]
     forward_only: t.NotRequired[bool]
@@ -276,19 +276,57 @@ class SQLMeshInstance:
 
     def plan_and_run(
         self,
+        *,
+        select_models: list[str] | None = None,
+        restate_selected: bool = False,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
         categorizer: t.Optional[SnapshotCategorizer] = None,
         default_catalog: t.Optional[str] = None,
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
+        skip_run: bool = False,
     ):
-        run_options = run_options or {}
-        plan_options = plan_options or {}
+        """Executes a plan and run operation
+
+        This is an opinionated interface for running a plan and run operation in
+        a single thread. It is recommended to use this method for most use cases.
+        """
+        run_options = run_options or RunOptions()
+        plan_options = plan_options or PlanOptions()
+
+        if plan_options.get("select_models") or run_options.get("select_models"):
+            raise ValueError(
+                "select_models should not be set in plan_options or run_options use the `select_models` or `select_models_func` arguments instead"
+            )
+        if plan_options.get("restate_models"):
+            raise ValueError(
+                "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` or `select_models_func` instead"
+            )
+        select_models = select_models or []
+
+        if start:
+            plan_options["start"] = start
+            run_options["start"] = start
+        if end:
+            plan_options["end"] = end
+            run_options["end"] = end
+
+        if select_models:
+            if restate_selected:
+                plan_options["restate_models"] = select_models
+                plan_options["select_models"] = select_models
+            else:
+                plan_options["select_models"] = select_models
+            run_options["select_models"] = select_models
 
         try:
             self.logger.debug("starting sqlmesh plan")
+            self.logger.debug(f"selected models: {select_models}")
             yield from self.plan(categorizer, default_catalog, **plan_options)
             self.logger.debug("starting sqlmesh run")
-            yield from self.run(**run_options)
+            if not skip_run:
+                yield from self.run(**run_options)
         except Exception as e:
             self.logger.error(f"Error during sqlmesh plan and run: {e}")
             raise e
@@ -442,15 +480,26 @@ class SQLMeshController:
     def plan_and_run(
         self,
         environment: str,
+        *,
         categorizer: t.Optional[SnapshotCategorizer] = None,
+        select_models: list[str] | None = None,
+        restate_selected: bool = False,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
         default_catalog: t.Optional[str] = None,
         plan_options: t.Optional[PlanOptions] = None,
         run_options: t.Optional[RunOptions] = None,
+        skip_run: bool = False,
     ):
         with self.instance(environment, "plan_and_run") as mesh:
             yield from mesh.plan_and_run(
+                start=start,
+                end=end,
+                select_models=select_models,
+                restate_selected=restate_selected,
                 categorizer=categorizer,
                 default_catalog=default_catalog,
                 plan_options=plan_options,
                 run_options=run_options,
+                skip_run=skip_run,
             )
