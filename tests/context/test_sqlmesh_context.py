@@ -177,7 +177,7 @@ logger = logging.getLogger(__name__)
 def test_given_no_auto_upstream_and_skip_backfill_enabled_when_running_full_model_then_only_full_model_updates(
     sample_sqlmesh_test_context: SQLMeshTestContext,
 ):
-    """Test backfill behavior with dependent models (staging -> intermediate -> full).
+    """Test backfill and no_auto_upstream (both enabled) behavior with dependent models (staging -> intermediate -> full).
 
     Model chain:
     1. staging_model_1 (INCREMENTAL_BY_TIME_RANGE) reads from seed_model_1
