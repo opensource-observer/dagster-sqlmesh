@@ -69,7 +69,7 @@ class SQLMeshTestContext:
         )
         return controller
 
-    def query(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
+    def query(self, *args: t.Any, return_df: bool = False, **kwargs: t.Any) -> t.Any:
         """Execute a query against the test database.
 
         Args:
@@ -84,6 +84,8 @@ class SQLMeshTestContext:
             result = conn.sql(*args, **kwargs)
             # Only try to fetch results if it's a SELECT query
             if result is not None:
+                if return_df:
+                    return result.to_df()
                 return result.fetchall()
             return None
 
@@ -116,6 +118,113 @@ class SQLMeshTestContext:
         SELECT * FROM df 
         """
         )
+
+
+    def plan(
+        self,
+        *,
+        environment: str,
+        execution_time: TimeLike | None = None,
+        enable_debug_console: bool = False,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
+        plan_options: PlanOptions | None = None,
+        restate_models: list[str] | None = None,
+    ) -> None:
+        """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
+
+        Args:
+            environment (str): The environment to run SQLMesh in.
+            execution_time (TimeLike, optional): The execution timestamp for the run. Defaults to None.
+            enable_debug_console (bool, optional): Flag to enable debug console. Defaults to False.
+            start (TimeLike, optional): Start time for the run interval. Defaults to None.
+            end (TimeLike, optional): End time for the run interval. Defaults to None.
+            plan_options (PlanOptions, optional): Plan options for the plan. Defaults to None.
+            restate_models (List[str], optional): List of models to restate. Defaults to None.
+
+        Returns:
+            None: The function records events to a debug console but doesn't return anything.
+
+        Note:
+            TimeLike can be any time-like object that SQLMesh accepts (datetime, str, etc.).
+            The function creates a controller and recorder to capture all SQLMesh events during execution.
+        """
+        controller = self.create_controller(enable_debug_console=enable_debug_console)
+        recorder = ConsoleRecorder()
+        # controller.add_event_handler(ConsoleRecorder())
+        if plan_options is None:
+            plan_options = PlanOptions(
+                enable_preview=True,
+            )
+
+        if execution_time:
+            plan_options["execution_time"] = execution_time
+        if restate_models:
+            plan_options["restate_models"] = restate_models
+        if start:
+            plan_options["start"] = start
+        if end:
+            plan_options["end"] = end
+
+        for event in controller.plan(
+            environment,
+            plan_options=plan_options,
+            categorizer=None,
+            default_catalog=None,
+        ):
+            recorder(event)
+
+
+    def run(
+        self,
+        *,
+        environment: str,
+        execution_time: TimeLike | None = None,
+        enable_debug_console: bool = False,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
+        run_options: RunOptions | None = None,
+        restate_models: list[str] | None = None,
+    ) -> None:
+        """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
+
+        Args:
+            environment (str): The environment to run SQLMesh in.
+            execution_time (TimeLike, optional): The execution timestamp for the run. Defaults to None.
+            enable_debug_console (bool, optional): Flag to enable debug console. Defaults to False.
+            start (TimeLike, optional): Start time for the run interval. Defaults to None.
+            end (TimeLike, optional): End time for the run interval. Defaults to None.
+            run_options (RunOptions, optional): Run options for the run. Defaults to None.
+            restate_models (List[str], optional): List of models to restate. Defaults to None.
+
+        Returns:
+            None: The function records events to a debug console but doesn't return anything.
+
+        Note:
+            TimeLike can be any time-like object that SQLMesh accepts (datetime, str, etc.).
+            The function creates a controller and recorder to capture all SQLMesh events during execution.
+        """
+        controller = self.create_controller(enable_debug_console=enable_debug_console)
+        recorder = ConsoleRecorder()
+        # controller.add_event_handler(ConsoleRecorder())
+        if run_options is None:
+            run_options = RunOptions()
+
+        if execution_time:
+            run_options["execution_time"] = execution_time
+        if start:
+            run_options["start"] = start
+        if end:
+            run_options["end"] = end
+
+        for event in controller.run(
+            environment,
+            **run_options,
+        ):
+            recorder(event)
+
+
+
 
     def plan_and_run(
         self,

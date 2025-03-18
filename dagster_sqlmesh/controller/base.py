@@ -58,6 +58,8 @@ class RunOptions(t.TypedDict):
     skip_janitor: t.NotRequired[bool]
     ignore_cron: t.NotRequired[bool]
     select_models: t.NotRequired[t.Collection[str]]
+    exit_on_env_update: t.NotRequired[int]
+    no_auto_upstream: t.NotRequired[bool]
 
 
 @dataclass(kw_only=True)
@@ -260,6 +262,8 @@ class SQLMeshInstance:
                     builder=builder,
                 )
                 plan_str = self._get_plan_summary(plan)
+
+                print(f"plan_str: {plan_str}")
 
                 logger.debug("dagster-sqlmesh: plan")
                 logger.info(f"Plan Summary: {plan_str}")
