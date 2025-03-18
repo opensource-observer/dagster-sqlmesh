@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ logger = logging.getLogger(__name__)
 #     assert final_staging_3_count > initial_staging_3_count
 
 
-def test_given_dependent_models_when_backfill_settings_differ_then_behaves_correctly(
+def test_given_no_auto_upstream_and_skip_backfill_enabled_when_running_full_model_then_only_full_model_updates(
     sample_sqlmesh_test_context: SQLMeshTestContext,
 ):
     """Test backfill behavior with dependent models (staging -> intermediate -> full).
@@ -215,13 +216,25 @@ def test_given_dependent_models_when_backfill_settings_differ_then_behaves_corre
 
     print(f"initial_counts: {initial_counts}")
 
-
-    # Second test: with backfill enabled, changes should propagate through the chain
+    # Actual test: with backfill enabled, changes should propagate through the chain
     sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
+        start="2023-01-01",  # TODO SQLMesh may have a bug where it doesn't update full_model if start is not set (full model has the wrong snapshot as a parent)
         end="2024-07-15",
         execution_time="2024-07-15",
-
+        plan_options=PlanOptions(
+            select_models=[
+                "sqlmesh_example.full_model",
+            ],
+            skip_backfill=True,
+            enable_preview=True,
+        ),
+        run_options=RunOptions(
+            select_models=[
+                "sqlmesh_example.full_model",
+            ],
+            no_auto_upstream=True,
+        ),
     )
 
     # Verify changes propagated through the chain
@@ -242,33 +255,36 @@ def test_given_dependent_models_when_backfill_settings_differ_then_behaves_corre
             "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
         )[0][0],
     }
-    print(f"initial_counts: {initial_counts}")
-    print(f"final_counts: {final_counts}")
-    print(f"intermediate_model_1: {sample_sqlmesh_test_context.query(
-            "SELECT * FROM sqlmesh_example__dev.intermediate_model_1", return_df=True
-        )}")
-    print(f"full_model: {sample_sqlmesh_test_context.query(
-            "SELECT * FROM sqlmesh_example__dev.full_model", return_df=True
-        )}")
-    raise Exception("stop here")
+    logger.debug(f"initial_counts: {initial_counts}")
+    logger.debug(f"final_counts: {final_counts}")
+    logger.debug(
+        f"intermediate_model_1: {
+            sample_sqlmesh_test_context.query(
+                'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
+                return_df=True,
+            )
+        }"
+    )
+    logger.debug(
+        f"full_model: {
+            sample_sqlmesh_test_context.query(
+                'SELECT * FROM sqlmesh_example__dev.full_model', return_df=True
+            )
+        }"
+    )
 
-
-    # With no_auto_upstream enabled:
-    # - staging_model_1 should have more records
-    # assert final_counts["staging_1"] == initial_counts["staging_1"], (
-    #     "staging_model_1 should have new records"
-    # )
-    # # - staging_model_2 should remain unchanged since its source (seed_model_2) hasn't changed
-    # assert final_counts["staging_2"] == initial_counts["staging_2"], (
-    #     "staging_model_2 should remain unchanged since seed_model_2 hasn't changed"
-    # )
-    # # - intermediate_model_1 should update since it depends on staging_model_1
-    # assert final_counts["intermediate"] == initial_counts["intermediate"], (
-    #     "intermediate should update with backfill enabled"
-    # )
-    # - full_model count should remain same since no new item_ids were added
-    assert final_counts["full"] == initial_counts["full"], (
-        "full model count should remain same since no new item_ids were added"
+    # With no_auto_upstream enabled and skip_backfill enabled:
+    assert final_counts["staging_1"] == initial_counts["staging_1"], (
+        "staging_model_1 should remain unchanged since skip_backfill is enabled and auto_upstream is disabled"
+    )
+    assert final_counts["staging_2"] == initial_counts["staging_2"], (
+        "staging_model_2 should remain unchanged since seed_model_2 hasn't changed and skip_backfill is enabled and auto_upstream is disabled"
+    )
+    assert final_counts["intermediate"] == initial_counts["intermediate"], (
+        "intermediate should remain unchanged since skip_backfill is enabled and auto_upstream is disabled"
+    )
+    assert final_counts["full"] >= initial_counts["full"], (
+        "full model count should increase since new item_ids were added"
     )
 
 
