@@ -255,9 +255,9 @@ def test_given_no_auto_upstream_and_skip_backfill_enabled_when_running_full_mode
             "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
         )[0][0],
     }
-    logger.debug(f"initial_counts: {initial_counts}")
-    logger.debug(f"final_counts: {final_counts}")
-    logger.debug(
+    print(f"initial_counts: {initial_counts}")
+    print(f"final_counts: {final_counts}")
+    print(
         f"intermediate_model_1: {
             sample_sqlmesh_test_context.query(
                 'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
@@ -265,7 +265,7 @@ def test_given_no_auto_upstream_and_skip_backfill_enabled_when_running_full_mode
             )
         }"
     )
-    logger.debug(
+    print(
         f"full_model: {
             sample_sqlmesh_test_context.query(
                 'SELECT * FROM sqlmesh_example__dev.full_model', return_df=True
@@ -283,8 +283,8 @@ def test_given_no_auto_upstream_and_skip_backfill_enabled_when_running_full_mode
     assert final_counts["intermediate"] == initial_counts["intermediate"], (
         "intermediate should remain unchanged since skip_backfill is enabled and auto_upstream is disabled"
     )
-    assert final_counts["full"] >= initial_counts["full"], (
-        "full model count should increase since new item_ids were added"
+    assert final_counts["full"] == initial_counts["full"], (
+        "full model count should remain unchanged since no new item_ids were added as the upstream models did not change"
     )
 
 
