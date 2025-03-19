@@ -387,7 +387,7 @@ def test_given_no_auto_upstream_disabled_and_skip_backfill_enabled_when_running_
         }"
     )
 
-    # With no_auto_upstream enabled and skip_backfill enabled:
+    # With no_auto_upstream disabled and skip_backfill enabled:
     assert final_counts["staging_1"] >= initial_counts["staging_1"], (
         "staging_model_1 should increase since no_auto_upstream is disabled"
     )
@@ -400,7 +400,6 @@ def test_given_no_auto_upstream_disabled_and_skip_backfill_enabled_when_running_
     assert final_counts["full"] >= initial_counts["full"], (
         "full model count should increase since new item_ids were added as the upstream models have changed"
     )
-
 
 
 def test_given_no_auto_upstream_enabled_and_skip_backfill_disabled_when_running_full_model_then_only_full_model_updates(
@@ -502,7 +501,7 @@ def test_given_no_auto_upstream_enabled_and_skip_backfill_disabled_when_running_
         }"
     )
 
-    # With no_auto_upstream enabled and skip_backfill enabled:
+    # With no_auto_upstream enabled and skip_backfill disabled:
     assert final_counts["staging_1"] >= initial_counts["staging_1"], (
         "staging_model_1 should increase since skip_backfill is disabled"
     )
@@ -515,8 +514,6 @@ def test_given_no_auto_upstream_enabled_and_skip_backfill_disabled_when_running_
     assert final_counts["full"] >= initial_counts["full"], (
         "full model count should increase since new item_ids were added as the upstream models have changed"
     )
-
-
 
 
 def test_given_no_auto_upstream_disabled_and_skip_backfill_disabled_when_running_full_model_then_only_full_model_updates(
@@ -618,7 +615,7 @@ def test_given_no_auto_upstream_disabled_and_skip_backfill_disabled_when_running
         }"
     )
 
-    # With no_auto_upstream enabled and skip_backfill enabled:
+    # With no_auto_upstream disabled and skip_backfill disabled:
     assert final_counts["staging_1"] >= initial_counts["staging_1"], (
         "staging_model_1 should increase since skip_backfill is disabled and no_auto_upstream is disabled"
     )
@@ -631,7 +628,6 @@ def test_given_no_auto_upstream_disabled_and_skip_backfill_disabled_when_running
     assert final_counts["full"] >= initial_counts["full"], (
         "full model count should increase since new item_ids were added as the upstream models have changed"
     )
-
 
 
 if __name__ == "__main__":
