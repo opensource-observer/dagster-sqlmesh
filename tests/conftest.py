@@ -55,6 +55,7 @@ class SQLMeshTestContext:
 
     db_path: str
     context_config: SQLMeshContextConfig
+    project_path: str
 
     def create_controller(
         self, enable_debug_console: bool = False
@@ -68,6 +69,81 @@ class SQLMeshTestContext:
             )
         )
         return controller
+
+    def get_model_path(self, model_name: str) -> str:
+        """Get the full path to a model file.
+
+        Args:
+            model_name: The name of the model file (e.g. 'staging_model_1.sql')
+
+        Returns:
+            str: Full path to the model file
+        """
+        # Common model directories to search
+        model_dirs = [
+            os.path.join(self.project_path, "models"),
+            os.path.join(self.project_path, "models", "staging"),
+            os.path.join(self.project_path, "models", "intermediate"),
+            os.path.join(self.project_path, "models", "mart"),
+        ]
+
+        for directory in model_dirs:
+            if not os.path.exists(directory):
+                continue
+            for root, _, files in os.walk(directory):
+                if model_name in files:
+                    return os.path.join(root, model_name)
+
+        raise FileNotFoundError(f"Model file {model_name} not found in project")
+
+    def backup_model_file(self, model_name: str) -> None:
+        """Create a backup of a model file.
+
+        Args:
+            model_name: The name of the model file to backup
+        """
+        model_path = self.get_model_path(model_name)
+        backup_path = f"{model_path}.bak"
+        shutil.copy2(model_path, backup_path)
+
+    def restore_model_file(self, model_name: str) -> None:
+        """Restore a model file from its backup.
+
+        Args:
+            model_name: The name of the model file to restore
+        """
+        model_path = self.get_model_path(model_name)
+        backup_path = f"{model_path}.bak"
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, model_path)
+            os.remove(backup_path)
+
+    def modify_model_file(self, model_name: str, new_content: str) -> None:
+        """Modify a model file with new content, creating a backup first.
+
+        Args:
+            model_name: The name of the model file to modify
+            new_content: The new content for the model file
+        """
+        model_path = self.get_model_path(model_name)
+        if not hasattr(self, "_backed_up_files"):
+            self._backed_up_files = set()
+
+        # Create backup if not already done
+        if model_name not in self._backed_up_files:
+            self.backup_model_file(model_name)
+            self._backed_up_files.add(model_name)
+
+        # Write new content
+        with open(model_path, "w") as f:
+            f.write(new_content)
+
+    def cleanup_modified_files(self) -> None:
+        """Restore all modified model files from their backups."""
+        if hasattr(self, "_backed_up_files"):
+            for model_name in self._backed_up_files:
+                self.restore_model_file(model_name)
+            self._backed_up_files.clear()
 
     def query(self, *args: t.Any, return_df: bool = False, **kwargs: t.Any) -> t.Any:
         """Execute a query against the test database.
@@ -118,7 +194,6 @@ class SQLMeshTestContext:
         SELECT * FROM df 
         """
         )
-
 
     def plan(
         self,
@@ -174,7 +249,6 @@ class SQLMeshTestContext:
         ):
             recorder(event)
 
-
     def run(
         self,
         *,
@@ -222,9 +296,6 @@ class SQLMeshTestContext:
             **run_options,
         ):
             recorder(event)
-
-
-
 
     def plan_and_run(
         self,
@@ -301,6 +372,54 @@ def sample_sqlmesh_test_context(
     context_config = SQLMeshContextConfig(
         path=sample_sqlmesh_project, gateway="local", config_override=config_as_dict
     )
-    test_context = SQLMeshTestContext(db_path=db_path, context_config=context_config)
+    test_context = SQLMeshTestContext(
+        db_path=db_path,
+        context_config=context_config,
+        project_path=sample_sqlmesh_project,
+    )
     test_context.initialize_test_source()
     yield test_context
+
+
+@pytest.fixture
+def model_change_test_context(
+    sample_sqlmesh_project: str,
+) -> t.Generator[SQLMeshTestContext, None, None]:
+    """Creates a SQLMesh test context specifically for testing model code changes.
+
+    This fixture provides a context that allows modifying SQL model files and ensures
+    they are properly restored after the test completes.
+
+    Args:
+        sample_sqlmesh_project: The base project directory
+
+    Yields:
+        SQLMeshTestContext: A test context with additional methods for modifying model files
+    """
+    db_path = os.path.join(sample_sqlmesh_project, "db.db")
+    config = SQLMeshConfig(
+        gateways={
+            "local": GatewayConfig(connection=DuckDBConnectionConfig(database=db_path)),
+        },
+        default_gateway="local",
+        model_defaults=ModelDefaultsConfig(dialect="duckdb"),
+    )
+    config_as_dict = config.dict()
+    context_config = SQLMeshContextConfig(
+        path=sample_sqlmesh_project, gateway="local", config_override=config_as_dict
+    )
+    test_context = SQLMeshTestContext(
+        db_path=db_path,
+        context_config=context_config,
+        project_path=sample_sqlmesh_project,
+    )
+    test_context.initialize_test_source()
+
+    yield test_context
+
+    # Cleanup: restore any modified files
+    test_context.cleanup_modified_files()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

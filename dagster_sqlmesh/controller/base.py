@@ -153,16 +153,40 @@ class SQLMeshInstance:
         plan_summary = [
             "SQLMesh Plan Summary:",
             f"• Models: {directly_modified} direct changes, {indirectly_modified} indirect changes",
-            f"• Time Range: {plan.provided_start or 'default'} → {plan.provided_end or 'default'}",
-            "• Configuration:",
-            f"  - Skip Backfill: {plan.skip_backfill}",
-            f"  - Forward Only: {plan.forward_only}",
-            f"  - No Gaps: {plan.no_gaps}",
-            f"  - Include Unmodified: {plan.include_unmodified}",
-            f"  - Empty Backfill: {plan.empty_backfill}",
-            f"  - End Bounded: {plan.end_bounded}",
-            f"  - Is Dev Environment: {plan.is_dev}",
+            "• Direct Modifications:",
         ]
+
+        # Add directly modified models
+        for model in sorted(plan.directly_modified):
+            plan_summary.append(f"  - {model}")
+
+        # Add indirectly modified models and their parents
+        if plan.indirectly_modified:
+            plan_summary.append("• Indirect Modifications:")
+            for parent, children in sorted(plan.indirectly_modified.items()):
+                plan_summary.append(f"  - Due to {parent}:")
+                for child in sorted(children):
+                    plan_summary.append(f"    • {child}")
+
+        # Add restatements if any exist
+        if plan.restatements:
+            plan_summary.append("• Restatements:")
+            for model, interval in sorted(plan.restatements.items()):
+                plan_summary.append(f"  - {model}: {interval}")
+
+        plan_summary.extend(
+            [
+                f"• Time Range: {plan.provided_start or 'default'} → {plan.provided_end or 'default'}",
+                "• Configuration:",
+                f"  - Skip Backfill: {plan.skip_backfill}",
+                f"  - Forward Only: {plan.forward_only}",
+                f"  - No Gaps: {plan.no_gaps}",
+                f"  - Include Unmodified: {plan.include_unmodified}",
+                f"  - Empty Backfill: {plan.empty_backfill}",
+                f"  - End Bounded: {plan.end_bounded}",
+                f"  - Is Dev Environment: {plan.is_dev}",
+            ]
+        )
 
         if plan.skip_backfill:
             plan_summary.append("• Backfill: DISABLED (skip_backfill=True)")

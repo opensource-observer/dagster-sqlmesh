@@ -68,6 +68,12 @@ dev: dagster-dev  # Alias for dagster-dev
 dagster-materialize:
 	$(PYTHON_CMD) -m dagster asset materialize -f sample/dagster_project/definitions.py --select '*'
 
+sqlmesh-plan:
+	cd sample/sqlmesh_project && $(SQLMESH_CMD) plan
+
+sqlmesh-run:
+	cd sample/sqlmesh_project && $(SQLMESH_CMD) run
+
 clean-dev: clean-db clean-dagster dev
 
 .PHONY: init init-python install-python-deps upgrade-python-deps clean test mypy check-pnpm install-node-deps upgrade-node-deps sample-dev dagster-dev dagster-materialize clean-dagster clean-db clean-dev 
