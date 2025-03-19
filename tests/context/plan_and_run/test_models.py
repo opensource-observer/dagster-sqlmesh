@@ -175,11 +175,13 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
                 f"{model} count should remain unchanged when "
                 f"no_auto_upstream={no_auto_upstream} and skip_backfill={skip_backfill}"
             )
-        else:  # ">="
+        elif expected_change == ">=":
             assert final_counts[model] >= initial_counts[model], (
                 f"{model} count should increase when "
                 f"no_auto_upstream={no_auto_upstream} and skip_backfill={skip_backfill}"
             )
+        else:
+            raise ValueError(f"Invalid expected change: {expected_change}")
 
 
 if __name__ == "__main__":
