@@ -1,33 +1,34 @@
 import logging
+import os
+import shutil
 import sys
 import tempfile
-import shutil
-import os
-from dataclasses import dataclass
 import typing as t
+from dataclasses import dataclass
 
-import pytest
 import duckdb
 import polars
-from sqlmesh.utils.date import TimeLike
-from sqlmesh.core.console import get_console
+import pytest
 from sqlmesh.core.config import (
     Config as SQLMeshConfig,
-    GatewayConfig,
     DuckDBConnectionConfig,
+    GatewayConfig,
     ModelDefaultsConfig,
 )
+from sqlmesh.core.console import get_console
+from sqlmesh.utils.date import TimeLike
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
-from dagster_sqlmesh.events import ConsoleRecorder
+from dagster_sqlmesh.console import ConsoleEvent
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
+from dagster_sqlmesh.events import ConsoleRecorder
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_debug_logging_for_tests():
+def setup_debug_logging_for_tests() -> None:
     root_logger = logging.getLogger(__name__.split(".")[0])
     root_logger.setLevel(logging.DEBUG)
 
@@ -35,7 +36,7 @@ def setup_debug_logging_for_tests():
 
 
 @pytest.fixture
-def sample_sqlmesh_project():
+def sample_sqlmesh_project() -> t.Iterator[str]:
     """Creates a temporary sqlmesh project by copying the sample project"""
     with tempfile.TemporaryDirectory() as tmp_dir:
         project_dir = shutil.copytree(
@@ -56,7 +57,9 @@ class SQLMeshTestContext:
     db_path: str
     context_config: SQLMeshContextConfig
 
-    def create_controller(self, enable_debug_console: bool = False):
+    def create_controller(
+        self, enable_debug_console: bool = False
+    ) -> DagsterSQLMeshController:
         console = None
         if enable_debug_console:
             console = get_console()
@@ -64,11 +67,11 @@ class SQLMeshTestContext:
             self.context_config, debug_console=console
         )
 
-    def query(self, *args, **kwargs):
+    def query(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
         conn = duckdb.connect(self.db_path)
         return conn.sql(*args, **kwargs).fetchall()
 
-    def initialize_test_source(self):
+    def initialize_test_source(self) -> None:
         conn = duckdb.connect(self.db_path)
         conn.sql(
             """
@@ -102,14 +105,14 @@ class SQLMeshTestContext:
         self,
         *,
         environment: str,
-        execution_time: t.Optional[TimeLike] = None,
+        execution_time: TimeLike | None = None,
         enable_debug_console: bool = False,
-        start: t.Optional[TimeLike] = None,
-        end: t.Optional[TimeLike] = None,
-        select_models: t.Optional[t.List[str]] = None,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
+        select_models: list[str] | None = None,
         restate_selected: bool = False,
         skip_run: bool = False,
-    ):
+    ) -> t.Iterator[ConsoleEvent] | None:
         """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
 
         Args:
@@ -152,7 +155,9 @@ class SQLMeshTestContext:
 
 
 @pytest.fixture
-def sample_sqlmesh_test_context(sample_sqlmesh_project: str):
+def sample_sqlmesh_test_context(
+    sample_sqlmesh_project: str,
+) -> t.Iterator[SQLMeshTestContext]:
     db_path = os.path.join(sample_sqlmesh_project, "db.db")
     config = SQLMeshConfig(
         gateways={
