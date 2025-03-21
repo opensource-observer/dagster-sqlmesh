@@ -1,15 +1,16 @@
 import typing as t
 from dataclasses import dataclass, field
+
 from dagster import (
     AssetCheckResult,
+    AssetKey,
     AssetMaterialization,
     AssetOut,
-    AssetKey,
 )
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 from sqlmesh.core.model import Model
 
-MultiAssetResponse = t.Iterable[t.Union[AssetCheckResult, AssetMaterialization]]
+MultiAssetResponse = t.Iterable[AssetCheckResult | AssetMaterialization]
 
 
 @dataclass(kw_only=True)
@@ -19,7 +20,7 @@ class SQLMeshParsedFQN:
     view_name: str
 
     @classmethod
-    def parse(cls, fqn: str):
+    def parse(cls, fqn: str) -> "SQLMeshParsedFQN":
         split_fqn = fqn.split(".")
 
         # Remove any quotes
@@ -30,16 +31,14 @@ class SQLMeshParsedFQN:
 @dataclass(kw_only=True)
 class SQLMeshModelDep:
     fqn: str
-    model: t.Optional[Model] = None
+    model: Model | None = None
 
-    def parse_fqn(self):
+    def parse_fqn(self) -> SQLMeshParsedFQN:
         return SQLMeshParsedFQN.parse(self.fqn)
 
 
 @dataclass(kw_only=True)
 class SQLMeshMultiAssetOptions:
-    outs: t.Dict[str, AssetOut] = field(default_factory=lambda: {})
+    outs: dict[str, AssetOut] = field(default_factory=lambda: {})
     deps: t.Iterable[CoercibleToAssetDep] = field(default_factory=lambda: {})
-    internal_asset_deps: t.Dict[str, t.Set[AssetKey]] = field(
-        default_factory=lambda: {}
-    )
+    internal_asset_deps: dict[str, set[AssetKey]] = field(default_factory=lambda: {})
