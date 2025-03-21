@@ -1,10 +1,10 @@
 import typing as t
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 from sqlmesh import ExecutionContext, model
 from sqlmesh.core.model import ModelKindName
-import numpy as np
 
 
 @model(
@@ -21,8 +21,8 @@ def staging_model_4(
     context: ExecutionContext,
     start: datetime,
     end: datetime,
-    **kwargs,
-) -> t.Generator[pd.DataFrame, None, None]:
+    **kwargs: t.Any,
+) -> t.Iterator[pd.DataFrame]:
     # Generates a set of random rows for the model based on the start and end dates
     date_range = pd.date_range(start=start, end=end, freq="D")
     num_days = len(date_range)

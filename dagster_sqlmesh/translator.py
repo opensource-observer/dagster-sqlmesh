@@ -1,9 +1,9 @@
-import typing as t
+
 import sqlglot
+from dagster import AssetKey
 from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
-from dagster import AssetKey
 
 
 class SQLMeshDagsterTranslator:
@@ -26,6 +26,6 @@ class SQLMeshDagsterTranslator:
     def _get_context_dialect(self, context: Context) -> str:
         return context.engine_adapter.dialect
 
-    def get_tags(self, context: Context, model: Model) -> t.Dict[str, str]:
+    def get_tags(self, context: Context, model: Model) -> dict[str, str]:
         """Given the sqlmesh context and a model return the tags for that model"""
         return {k: "true" for k in model.tags}

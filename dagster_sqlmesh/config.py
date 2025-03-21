@@ -1,16 +1,16 @@
-from typing import Optional, Dict, Any
 from dataclasses import dataclass
+from typing import Any
 
 from dagster import Config
-from sqlmesh.core.config import Config as MeshConfig
 from pydantic import Field
+from sqlmesh.core.config import Config as MeshConfig
 
 
 @dataclass
 class ConfigOverride:
-    config_as_dict: Dict
+    config_as_dict: dict[str, Any]
 
-    def dict(self):
+    def dict(self) -> dict[str, Any]:
         return self.config_as_dict
 
 
@@ -24,10 +24,10 @@ class SQLMeshContextConfig(Config):
 
     path: str
     gateway: str
-    config_override: Optional[Dict[str, Any]] = Field(default_factory=lambda: None)
+    config_override: dict[str, Any] | None = Field(default_factory=lambda: None)
 
     @property
-    def sqlmesh_config(self):
+    def sqlmesh_config(self) -> MeshConfig | None:
         if self.config_override:
             return MeshConfig.parse_obj(self.config_override)
         return None

@@ -62,3 +62,8 @@ dbt_packages/
 *.pyc
 
 *.db
+
+sample/dagster_project/storage/
+sample/dagster_project/logs/
+sample/dagster_project/history/
+sample/dagster_project/schedules/

@@ -1,6 +1,7 @@
 import logging
 
 import polars
+
 from .conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
@@ -183,12 +184,12 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
     """
     )
 
-    assert (
-        feb_sum_query_restate[0][0] == feb_sum_query[0][0]
-    ), "February sum should not change"
-    assert (
-        march_sum_query_restate[0][0] != march_sum_query[0][0]
-    ), "March sum should change"
-    assert (
-        intermediate_2_query_restate[0][0] == intermediate_2_query[0][0]
-    ), "Intermediate model should not change during restate"
+    assert feb_sum_query_restate[0][0] == feb_sum_query[0][0], (
+        "February sum should not change"
+    )
+    assert march_sum_query_restate[0][0] != march_sum_query[0][0], (
+        "March sum should change"
+    )
+    assert intermediate_2_query_restate[0][0] == intermediate_2_query[0][0], (
+        "Intermediate model should not change during restate"
+    )
