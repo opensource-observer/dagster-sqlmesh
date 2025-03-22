@@ -1,7 +1,7 @@
 from dagster_sqlmesh.asset import (
     SQLMeshDagsterTranslator,
 )
-from dagster_sqlmesh.conftest import SQLMeshTestContext
+from tests.conftest import SQLMeshTestContext
 
 
 def test_sqlmesh_context_to_asset_outs(sample_sqlmesh_test_context: SQLMeshTestContext):
