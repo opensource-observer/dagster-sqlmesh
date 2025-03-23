@@ -383,21 +383,55 @@ def sample_sqlmesh_test_context(
 
 
 @pytest.fixture
+def permanent_sqlmesh_project() -> str:
+    """Returns the path to the permanent sample SQLMesh project.
+
+    This fixture provides access to the sample project without copying to a temp directory,
+    which is useful for debugging and investigating issues with file handling.
+    It creates a permanent copy of the sample project in tests/temp/sqlmesh_project
+    if it doesn't exist.
+
+    Returns:
+        str: Absolute path to the sample SQLMesh project directory
+    """
+    # Define source and target paths
+    source_dir = os.path.abspath("sample/sqlmesh_project")
+    project_dir = os.path.abspath("tests/temp/sqlmesh_project")
+
+    # Create the temp directory if it doesn't exist
+    os.makedirs(os.path.dirname(project_dir), exist_ok=True)
+
+    # If project directory doesn't exist or is empty, copy from sample
+    if not os.path.exists(project_dir) or not os.listdir(project_dir):
+        if os.path.exists(project_dir):
+            shutil.rmtree(project_dir)
+        shutil.copytree(source_dir, project_dir)
+
+    # Clean up any existing db file
+    # db_path = os.path.join(project_dir, "db.db")
+    # if os.path.exists(db_path):
+    #     os.remove(db_path)
+
+    return project_dir
+
+
+@pytest.fixture
 def model_change_test_context(
-    sample_sqlmesh_project: str,
+    permanent_sqlmesh_project: str,
 ) -> t.Generator[SQLMeshTestContext, None, None]:
     """Creates a SQLMesh test context specifically for testing model code changes.
 
     This fixture provides a context that allows modifying SQL model files and ensures
-    they are properly restored after the test completes.
+    they are properly restored after the test completes. It uses a permanent project
+    directory instead of a temporary one for better debugging and investigation.
 
     Args:
-        sample_sqlmesh_project: The base project directory
+        permanent_sqlmesh_project: The permanent project directory
 
     Yields:
         SQLMeshTestContext: A test context with additional methods for modifying model files
     """
-    db_path = os.path.join(sample_sqlmesh_project, "db.db")
+    db_path = os.path.join(permanent_sqlmesh_project, "db.db")
     config = SQLMeshConfig(
         gateways={
             "local": GatewayConfig(connection=DuckDBConnectionConfig(database=db_path)),
@@ -407,19 +441,19 @@ def model_change_test_context(
     )
     config_as_dict = config.dict()
     context_config = SQLMeshContextConfig(
-        path=sample_sqlmesh_project, gateway="local", config_override=config_as_dict
+        path=permanent_sqlmesh_project, gateway="local", config_override=config_as_dict
     )
     test_context = SQLMeshTestContext(
         db_path=db_path,
         context_config=context_config,
-        project_path=sample_sqlmesh_project,
+        project_path=permanent_sqlmesh_project,
     )
-    test_context.initialize_test_source()
+    # test_context.initialize_test_source()
 
     yield test_context
 
     # Cleanup: restore any modified files
-    test_context.cleanup_modified_files()
+    # test_context.cleanup_modified_files()
 
 
 if __name__ == "__main__":

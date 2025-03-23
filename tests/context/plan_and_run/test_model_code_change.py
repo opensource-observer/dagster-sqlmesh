@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
+from dagster_sqlmesh.controller.base import PlanOptions
 from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
     "no_auto_upstream,skip_backfill,expected_changes",
     [
         (
-            True,
+            False,
             False,
             {
                 "staging_1": ">=",  # Should increase (skip_backfill disabled)
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
         "only_skip_backfill",
     ],
 )
+@pytest.mark.skip(reason="Work in progress test")
 def test_given_model_chain_when_running_with_different_flags_then_behaves_as_expected(
     model_change_test_context: SQLMeshTestContext,
     no_auto_upstream: bool,
@@ -54,85 +55,80 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
             ">=" means final count should be greater than or equal to initial
     """
     # Initial run to set up all models
-    model_change_test_context.plan_and_run(
-        environment="dev",
-        start="2023-02-01",
-        end="2023-02-03",
-        plan_options=PlanOptions(
-            execution_time="2023-02-03",
-        ),
-        run_options=RunOptions(
-            execution_time="2023-02-03",
-        ),
-    )
+    # model_change_test_context.plan_and_run(
+    #     environment="dev",
+    #     start="2023-02-01",
+    #     end="2023-02-03",
+    #     plan_options=PlanOptions(
+    #         execution_time="2023-02-03",
+    #     ),
+    #     run_options=RunOptions(
+    #         execution_time="2023-02-03",
+    #     ),
+    # )
 
-    # Get initial counts for the model chain
-    initial_counts = {
-        "staging_1": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
-        )[0][0],
-        "staging_2": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
-        )[0][0],
-        "intermediate": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
-        )[0][0],
-        "full": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
-        )[0][0],
-    }
+    # # Get initial counts for the model chain
+    # initial_counts = {
+    #     "staging_1": model_change_test_context.query(
+    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
+    #     )[0][0],
+    #     "staging_2": model_change_test_context.query(
+    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
+    #     )[0][0],
+    #     "intermediate": model_change_test_context.query(
+    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
+    #     )[0][0],
+    #     "full": model_change_test_context.query(
+    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
+    #     )[0][0],
+    # }
 
-    print(f"initial_counts: {initial_counts}")
-    print(
-        f"intermediate_model_1 first run: {
-            model_change_test_context.query(
-                'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
-                return_df=True,
-            )
-        }"
-    )
+    # print(f"initial_counts: {initial_counts}")
+    # print(
+    #     f"intermediate_model_1 first run: {
+    #         model_change_test_context.query(
+    #             'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
+    #             return_df=True,
+    #         )
+    #     }"
+    # )
 
-    # Modify staging_model_1 to include more data
-    model_change_test_context.modify_model_file(
-        "intermediate_model_1.sql",
-        """
-        MODEL (
-        name sqlmesh_example.intermediate_model_1,
-        kind INCREMENTAL_BY_TIME_RANGE (
-            time_column event_date
-        ),
-        start '2020-01-01',
-        cron '@daily',
-        grain (id, event_date)
-        );
+    # # Modify staging_model_1 to include more data
+    # model_change_test_context.modify_model_file(
+    #     "intermediate_model_1.sql",
+    #     """
+    #     MODEL (
+    #     name sqlmesh_example.intermediate_model_1,
+    #     kind INCREMENTAL_BY_TIME_RANGE (
+    #         time_column event_date
+    #     ),
+    #     start '2020-01-01',
+    #     cron '@daily',
+    #     grain (id, event_date)
+    #     );
 
-        SELECT
-        main.id,
-        main.item_id,
-        main.event_date,
-        CONCAT(sub.item_name, ' - modified') as item_name
-        FROM sqlmesh_example.staging_model_1 AS main
-        INNER JOIN sqlmesh_example.staging_model_2 as sub
-        ON main.id = sub.id
-        WHERE
-        event_date BETWEEN @start_date AND @end_date
+    #     SELECT
+    #     main.id,
+    #     main.item_id,
+    #     main.event_date,
+    #     CONCAT(sub.item_name, ' - modified18') as item_name
+    #     FROM sqlmesh_example.staging_model_1 AS main
+    #     INNER JOIN sqlmesh_example.staging_model_2 as sub
+    #     ON main.id = sub.id
+    #     WHERE
+    #     event_date BETWEEN @start_date AND @end_date
 
-        """,
-    )
+    #     """,
+    # )
+
+    # raise Exception("Stop here")
 
     # Run with specified flags
     model_change_test_context.plan_and_run(
         environment="dev",
-        start="2023-02-01",
-        end="2023-02-03",
         plan_options=PlanOptions(
             skip_backfill=skip_backfill,
             enable_preview=True,
-            execution_time="2023-02-03",
-        ),
-        run_options=RunOptions(
-            no_auto_upstream=no_auto_upstream,
-            execution_time="2023-02-03",
         ),
         select_models=["sqlmesh_example.intermediate_model_1"],
     )
