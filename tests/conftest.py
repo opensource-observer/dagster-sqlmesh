@@ -384,7 +384,7 @@ def sample_sqlmesh_test_context(
 
 @pytest.fixture
 def permanent_sqlmesh_project() -> str:
-    """Returns the path to the permanent sample SQLMesh project.
+    """FOR DEBUGGING ONLY: Returns the path to the permanent sample SQLMesh project.
 
     This fixture provides access to the sample project without copying to a temp directory,
     which is useful for debugging and investigating issues with file handling.
@@ -408,9 +408,9 @@ def permanent_sqlmesh_project() -> str:
         shutil.copytree(source_dir, project_dir)
 
     # Clean up any existing db file
-    # db_path = os.path.join(project_dir, "db.db")
-    # if os.path.exists(db_path):
-    #     os.remove(db_path)
+    db_path = os.path.join(project_dir, "db.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
 
     return project_dir
 
@@ -419,7 +419,7 @@ def permanent_sqlmesh_project() -> str:
 def model_change_test_context(
     permanent_sqlmesh_project: str,
 ) -> t.Generator[SQLMeshTestContext, None, None]:
-    """Creates a SQLMesh test context specifically for testing model code changes.
+    """FOR DEBUGGING ONLY: Creates a SQLMesh test context specifically for testing model code changes.
 
     This fixture provides a context that allows modifying SQL model files and ensures
     they are properly restored after the test completes. It uses a permanent project
@@ -448,7 +448,7 @@ def model_change_test_context(
         context_config=context_config,
         project_path=permanent_sqlmesh_project,
     )
-    # test_context.initialize_test_source()
+    test_context.initialize_test_source()
 
     yield test_context
 

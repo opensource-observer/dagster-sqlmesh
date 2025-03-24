@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
         "only_skip_backfill",
     ],
 )
-@pytest.mark.skip(reason="Work in progress test")
+# @pytest.mark.skip(reason="Work in progress test")
 def test_given_model_chain_when_running_with_different_flags_then_behaves_as_expected(
-    model_change_test_context: SQLMeshTestContext,
+    sample_sqlmesh_test_context: SQLMeshTestContext,
     no_auto_upstream: bool,
     skip_backfill: bool,
     expected_changes: dict[str, str],
@@ -55,175 +55,86 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
             ">=" means final count should be greater than or equal to initial
     """
     # Initial run to set up all models
-    # model_change_test_context.plan_and_run(
-    #     environment="dev",
-    #     start="2023-02-01",
-    #     end="2023-02-03",
-    #     plan_options=PlanOptions(
-    #         execution_time="2023-02-03",
-    #     ),
-    #     run_options=RunOptions(
-    #         execution_time="2023-02-03",
-    #     ),
-    # )
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+    )
 
-    # # Get initial counts for the model chain
-    # initial_counts = {
-    #     "staging_1": model_change_test_context.query(
-    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
-    #     )[0][0],
-    #     "staging_2": model_change_test_context.query(
-    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
-    #     )[0][0],
-    #     "intermediate": model_change_test_context.query(
-    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
-    #     )[0][0],
-    #     "full": model_change_test_context.query(
-    #         "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
-    #     )[0][0],
-    # }
 
-    # print(f"initial_counts: {initial_counts}")
-    # print(
-    #     f"intermediate_model_1 first run: {
-    #         model_change_test_context.query(
-    #             'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
-    #             return_df=True,
-    #         )
-    #     }"
-    # )
+    print(
+        f"intermediate_model_1 first run: {
+            sample_sqlmesh_test_context.query(
+                'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
+                return_df=True,
+            )
+        }"
+    )
+    print(
+        f"full_model first run: {
+            sample_sqlmesh_test_context.query(
+                'SELECT * FROM sqlmesh_example__dev.full_model',
+                return_df=True,
+            )
+        }"
+    )
 
-    # # Modify staging_model_1 to include more data
-    # model_change_test_context.modify_model_file(
-    #     "intermediate_model_1.sql",
-    #     """
-    #     MODEL (
-    #     name sqlmesh_example.intermediate_model_1,
-    #     kind INCREMENTAL_BY_TIME_RANGE (
-    #         time_column event_date
-    #     ),
-    #     start '2020-01-01',
-    #     cron '@daily',
-    #     grain (id, event_date)
-    #     );
+    # # Modify intermediate_model_1 sql to cause breaking change
+    sample_sqlmesh_test_context.modify_model_file(
+        "intermediate_model_1.sql",
+        """
+        MODEL (
+        name sqlmesh_example.intermediate_model_1,
+        kind INCREMENTAL_BY_TIME_RANGE (
+            time_column event_date
+        ),
+        start '2020-01-01',
+        cron '@daily',
+        grain (id, event_date)
+        );
 
-    #     SELECT
-    #     main.id,
-    #     main.item_id,
-    #     main.event_date,
-    #     CONCAT(sub.item_name, ' - modified18') as item_name
-    #     FROM sqlmesh_example.staging_model_1 AS main
-    #     INNER JOIN sqlmesh_example.staging_model_2 as sub
-    #     ON main.id = sub.id
-    #     WHERE
-    #     event_date BETWEEN @start_date AND @end_date
+        SELECT
+        main.id,
+        main.item_id,
+        main.event_date,
+        CONCAT(sub.item_name, ' - modified1') as item_name
+        FROM sqlmesh_example.staging_model_1 AS main
+        INNER JOIN sqlmesh_example.staging_model_2 as sub
+        ON main.id = sub.id
+        WHERE
+        event_date BETWEEN @start_date AND @end_date
 
-    #     """,
-    # )
+        """,
+    )
 
-    # raise Exception("Stop here")
 
     # Run with specified flags
-    model_change_test_context.plan_and_run(
+    sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
         plan_options=PlanOptions(
             skip_backfill=skip_backfill,
             enable_preview=True,
         ),
-        select_models=["sqlmesh_example.intermediate_model_1"],
     )
 
-    # Get final counts and debug info
-    final_counts = {
-        "seed_1": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.seed_model_1"
-        )[0][0],
-        "staging_1": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1"
-        )[0][0],
-        "staging_2": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_2"
-        )[0][0],
-        "intermediate": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.intermediate_model_1"
-        )[0][0],
-        "full": model_change_test_context.query(
-            "SELECT COUNT(*) FROM sqlmesh_example__dev.full_model"
-        )[0][0],
-    }
-    print(f"first_model_change_counts: {final_counts}")
-    # print(
-    #     f"intermediate_model_1 after first model change to upstream model: {
-    #         model_change_test_context.query(
-    #             'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
-    #             return_df=True,
-    #         )
-    #     }"
-    # )
+    print(
+        f"intermediate_model_1 after first model change to upstream model: {
+            sample_sqlmesh_test_context.query(
+                'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
+                return_df=True,
+            )
+        }"
+    )
 
-    # # Modify staging_model_1 to include more data
-    # model_change_test_context.modify_model_file(
-    #     "staging_model_2.sql",
-    #     """
-    #     MODEL (
-    #     name sqlmesh_example.staging_model_2,
-    #     grain id
-    #     );
-
-    #     SELECT
-    #     id,
-    #     CONCAT(item_name, ' - modified again') as item_name
-    #     FROM
-    #     sqlmesh_example.seed_model_2
-    #     """,
-    # )
-
-    # # Run with specified flags
-    # model_change_test_context.plan_and_run(
-    #     environment="dev",
-    #     start="2023-02-01",
-    #     end="2023-02-03",
-    #     execution_time="2023-02-03",
-    #     plan_options=PlanOptions(
-    #         select_models=[
-    #             "sqlmesh_example.staging_model_2",
-    #         ],
-    #         skip_backfill=skip_backfill,
-    #         enable_preview=True,
-    #     ),
-    #     # run_options=RunOptions(
-    #     #     select_models=[
-    #     #         "sqlmesh_example.staging_model_1",
-    #     #     ],
-    #     #     no_auto_upstream=no_auto_upstream,
-    #     # ),
-    # )
-
-    # print(
-    #     f"intermediate_model_1 after second model change to upstream model: {
-    #         model_change_test_context.query(
-    #             'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
-    #             return_df=True,
-    #         )
-    #     }"
-    # )
+    print(
+        f"full_model after first model change to upstream model: {
+            sample_sqlmesh_test_context.query(
+                'SELECT * FROM sqlmesh_example__dev.full_model',
+                return_df=True,
+            )
+        }"
+    )
 
     raise Exception("Stop here")
 
-    # # Verify counts match expectations
-    # for model, expected_change in expected_changes.items():
-    #     if expected_change == "==":
-    #         assert final_counts[model] == initial_counts[model], (
-    #             f"{model} count should remain unchanged when "
-    #             f"no_auto_upstream={no_auto_upstream} and skip_backfill={skip_backfill}"
-    #         )
-    #     elif expected_change == ">=":
-    #         assert final_counts[model] >= initial_counts[model], (
-    #             f"{model} count should increase when "
-    #             f"no_auto_upstream={no_auto_upstream} and skip_backfill={skip_backfill}"
-    #         )
-    #     else:
-    #         raise ValueError(f"Invalid expected change: {expected_change}")
 
 
 if __name__ == "__main__":

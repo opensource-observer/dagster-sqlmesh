@@ -15,4 +15,4 @@ SELECT
   COUNT(DISTINCT id) AS num_orders,
 FROM
   sqlmesh_example.intermediate_model_1
-GROUP BY item_id
+GROUP BY ALL
