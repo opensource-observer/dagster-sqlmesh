@@ -1,27 +1,33 @@
-from dataclasses import dataclass
-import typing as t
 import logging
 import threading
+import typing as t
 from contextlib import contextmanager
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import TypeVar
 
-from sqlmesh.utils.date import TimeLike
-from sqlmesh.core.context import Context
-from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.core.config import CategorizerConfig
 from sqlmesh.core.console import Console, set_console
+from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
+from sqlmesh.core.plan import PlanBuilder
+from sqlmesh.utils.dag import DAG
+from sqlmesh.utils.date import TimeLike
 
-from ..events import ConsoleGenerator
 from ..config import SQLMeshContextConfig
 from ..console import (
-    ConsoleException,
-    EventConsole,
+    ConsoleEvent,
     ConsoleEventHandler,
+    ConsoleException,
     DebugEventConsole,
+    EventConsole,
     SnapshotCategorizer,
 )
+from ..events import ConsoleGenerator
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T", bound="SQLMeshController")
 
 
 class PlanOptions(t.TypedDict):
@@ -52,6 +58,8 @@ class RunOptions(t.TypedDict):
     skip_janitor: t.NotRequired[bool]
     ignore_cron: t.NotRequired[bool]
     select_models: t.NotRequired[t.Collection[str]]
+    exit_on_env_update: t.NotRequired[int]
+    no_auto_upstream: t.NotRequired[bool]
 
 
 @dataclass(kw_only=True)
@@ -61,7 +69,7 @@ class SQLMeshParsedFQN:
     view_name: str
 
 
-def parse_fqn(fqn: str):
+def parse_fqn(fqn: str) -> SQLMeshParsedFQN:
     split_fqn = fqn.split(".")
 
     # Remove any quotes
@@ -74,9 +82,9 @@ def parse_fqn(fqn: str):
 @dataclass(kw_only=True)
 class SQLMeshModelDep:
     fqn: str
-    model: t.Optional[Model] = None
+    model: Model | None = None
 
-    def parse_fqn(self):
+    def parse_fqn(self) -> SQLMeshParsedFQN:
         return parse_fqn(self.fqn)
 
 
@@ -120,17 +128,19 @@ class SQLMeshInstance:
         self.logger = logger
 
     @contextmanager
-    def console_context(self, handler: ConsoleEventHandler):
+    def console_context(
+        self, handler: ConsoleEventHandler
+    ) -> t.Iterator[None]:
         id = self.console.add_handler(handler)
         yield
         self.console.remove_handler(id)
 
     def plan(
         self,
-        categorizer: t.Optional[SnapshotCategorizer] = None,
-        default_catalog: t.Optional[str] = None,
+        categorizer: SnapshotCategorizer | None = None,
+        default_catalog: str | None = None,
         **plan_options: t.Unpack[PlanOptions],
-    ):
+    ) -> t.Iterator[ConsoleEvent]:
         """
         Executes a sqlmesh plan operation in a separate thread and yields
         console events.
@@ -139,9 +149,9 @@ class SQLMeshInstance:
         thread, and provides real-time console output through a generator.
 
         Args:
-            categorizer (Optional[SnapshotCategorizer]): Categorizer for
+            categorizer (SnapshotCategorizer | None): Categorizer for
                 snapshots. Defaults to None.
-            default_catalog (Optional[str]): Default catalog to use for the
+            default_catalog (str | None): Default catalog to use for the
                 plan. Defaults to None.
             **plan_options (**PlanOptions): Additional options for plan
                 execution.
@@ -163,7 +173,7 @@ class SQLMeshInstance:
             environment: str,
             plan_options: PlanOptions,
             default_catalog: str,
-        ):
+        ) -> None:
             logger.debug("dagster-sqlmesh: thread started")
             try:
                 builder = t.cast(
@@ -214,7 +224,9 @@ class SQLMeshInstance:
 
             thread.join()
 
-    def run(self, **run_options: t.Unpack[RunOptions]):
+    def run(
+        self, **run_options: t.Unpack[RunOptions]
+    ) -> t.Iterator[ConsoleEvent]:
         """Executes sqlmesh run in a separate thread with console output.
 
         This method executes SQLMesh operations in a dedicated thread while
@@ -242,7 +254,7 @@ class SQLMeshInstance:
             controller: SQLMeshController,
             environment: str,
             run_options: RunOptions,
-        ):
+        ) -> None:
             logger.debug("dagster-sqlmesh: run")
             try:
                 context.run(environment=environment, **run_options)
@@ -281,12 +293,12 @@ class SQLMeshInstance:
         restate_selected: bool = False,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
-        categorizer: t.Optional[SnapshotCategorizer] = None,
-        default_catalog: t.Optional[str] = None,
-        plan_options: t.Optional[PlanOptions] = None,
-        run_options: t.Optional[RunOptions] = None,
+        categorizer: SnapshotCategorizer | None = None,
+        default_catalog: str | None = None,
+        plan_options: PlanOptions | None= None,
+        run_options: RunOptions | None = None,
         skip_run: bool = False,
-    ):
+    ) -> t.Iterator[ConsoleEvent]:
         """Executes a plan and run operation
 
         This is an opinionated interface for running a plan and run operation in
@@ -334,10 +346,10 @@ class SQLMeshInstance:
             self.logger.error("Error during sqlmesh plan and run")
             raise
 
-    def models(self):
+    def models(self) -> MappingProxyType[str, Model]:
         return self.context.models
 
-    def models_dag(self):
+    def models_dag(self) -> DAG[str]:
         return self.context.dag
 
 
@@ -382,9 +394,9 @@ class SQLMeshController:
         cls,
         path: str,
         gateway: str = "local",
-        debug_console: t.Optional[Console] = None,
-        log_override: t.Optional[logging.Logger] = None,
-    ):
+        debug_console: Console | None = None,
+        log_override: logging.Logger | None = None,
+    ) -> "SQLMeshController":
         return cls.setup_with_config(
             config=SQLMeshContextConfig(path=path, gateway=gateway),
             debug_console=debug_console,
@@ -393,11 +405,11 @@ class SQLMeshController:
 
     @classmethod
     def setup_with_config(
-        cls,
+        cls: type[T],
         config: SQLMeshContextConfig,
-        debug_console: t.Optional[Console] = None,
-        log_override: t.Optional[logging.Logger] = None,
-    ):
+        debug_console: Console | None = None,
+        log_override: logging.Logger | None = None,
+    ) -> T:
         console = EventConsole(log_override=log_override)
         if debug_console:
             console = DebugEventConsole(debug_console)
@@ -412,24 +424,25 @@ class SQLMeshController:
         self,
         config: SQLMeshContextConfig,
         console: EventConsole,
-        log_override: t.Optional[logging.Logger] = None,
-    ):
+        log_override: logging.Logger | None = None,
+    ) -> None:
         self.config = config
         self.console = console
         self.logger = log_override or logger
         self._context_open = False
 
-    def set_logger(self, logger: logging.Logger):
+    def set_logger(self, logger: logging.Logger) -> None:
         self.logger = logger
 
-    def add_event_handler(self, handler: ConsoleEventHandler):
-        return self.console.add_handler(handler)
+    def add_event_handler(self, handler: ConsoleEventHandler) -> str:
+        handler_id: str = self.console.add_handler(handler)
+        return handler_id
 
-    def remove_event_handler(self, handler_id: str):
-        return self.console.remove_handler(handler_id)
+    def remove_event_handler(self, handler_id: str) -> None:
+        self.console.remove_handler(handler_id)
 
-    def _create_context(self):
-        options: t.Dict[str, t.Any] = dict(
+    def _create_context(self) -> Context:
+        options: dict[str, t.Any] = dict(
             paths=self.config.path,
             gateway=self.config.gateway,
         )
@@ -439,7 +452,9 @@ class SQLMeshController:
         return Context(**options)
 
     @contextmanager
-    def instance(self, environment: str, component: str = "unknown"):
+    def instance(
+        self, environment: str, component: str = "unknown"
+    ) -> t.Iterator[SQLMeshInstance]:
         self.logger.info(
             f"Opening sqlmesh instance for env={environment} component={component}"
         )
@@ -463,17 +478,17 @@ class SQLMeshController:
         self,
         environment: str,
         **run_options: t.Unpack[RunOptions],
-    ):
+    ) -> t.Iterator[ConsoleEvent]:
         with self.instance(environment, "run") as mesh:
             yield from mesh.run(**run_options)
 
     def plan(
         self,
         environment: str,
-        categorizer: t.Optional[SnapshotCategorizer],
-        default_catalog: t.Optional[str],
+        categorizer: SnapshotCategorizer | None,
+        default_catalog: str | None,
         plan_options: PlanOptions,
-    ):
+    ) -> t.Iterator[ConsoleEvent]:
         with self.instance(environment, "plan") as mesh:
             yield from mesh.plan(categorizer, default_catalog, **plan_options)
 
@@ -481,16 +496,16 @@ class SQLMeshController:
         self,
         environment: str,
         *,
-        categorizer: t.Optional[SnapshotCategorizer] = None,
+        categorizer: SnapshotCategorizer | None = None,
         select_models: list[str] | None = None,
         restate_selected: bool = False,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
-        default_catalog: t.Optional[str] = None,
-        plan_options: t.Optional[PlanOptions] = None,
-        run_options: t.Optional[RunOptions] = None,
+        default_catalog: str | None = None,
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
         skip_run: bool = False,
-    ):
+    ) -> t.Iterator[ConsoleEvent]:
         with self.instance(environment, "plan_and_run") as mesh:
             yield from mesh.plan_and_run(
                 start=start,

@@ -300,10 +300,12 @@ dependencies = [
 dev = [
     { name = "dagster-duckdb-polars" },
     { name = "dagster-webserver" },
+    { name = "fastapi" },
     { name = "ipython" },
     { name = "pdbpp" },
     { name = "polars" },
     { name = "ruff" },
+    { name = "sse-starlette" },
 ]
 
 [package.metadata]
@@ -318,10 +320,12 @@ requires-dist = [
 dev = [
     { name = "dagster-duckdb-polars", specifier = ">=0.24.2" },
     { name = "dagster-webserver", specifier = ">=1.8.1" },
+    { name = "fastapi" },
     { name = "ipython", specifier = ">=8.26.0" },
     { name = "pdbpp", specifier = ">=0.10.3" },
     { name = "polars", specifier = ">=1.5.0" },
     { name = "ruff", specifier = ">=0.6.2" },
+    { name = "sse-starlette" },
 ]
 
 [[package]]
@@ -417,6 +421,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/95/649d135442d8ecf8af5c7e235550c628056423c96c4bc6787348bdae9248/fancycompleter-0.9.1.tar.gz", hash = "sha256:09e0feb8ae242abdfd7ef2ba55069a46f011814a80fe5476be48f51b00247272", size = 10866 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/ef/c08926112034d017633f693d3afc8343393a035134a29dfc12dcd71b0375/fancycompleter-0.9.1-py3-none-any.whl", hash = "sha256:dd076bca7d9d524cc7f25ec8f35ef95388ffef9ef46def4d3d25e9b044ad7080", size = 9681 },
+]
+
+[[package]]
+name = "fastapi"
+version = "0.115.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b5/28/c5d26e5860df807241909a961a37d45e10533acef95fc368066c7dd186cd/fastapi-0.115.11.tar.gz", hash = "sha256:cc81f03f688678b92600a65a5e618b93592c65005db37157147204d8924bf94f", size = 294441 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/5d/4d8bbb94f0dbc22732350c06965e40740f4a92ca560e90bb566f4f73af41/fastapi-0.115.11-py3-none-any.whl", hash = "sha256:32e1541b7b74602e4ef4a0260ecaf3aadf9d4f19590bba3e1bf2ac4666aa2c64", size = 94926 },
 ]
 
 [[package]]
@@ -1521,6 +1539,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/24/9a/79c7dae48551d223fa3a7188f80912c37aab0461e32002cc7cd820a9569e/sqlmesh-0.164.0.tar.gz", hash = "sha256:c442cd8da2ce78c8dc333c226d68977541e2b4bd3c65ea37e86447a74e4cf85b", size = 9554288 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/cd/cbdbcf1d03b9483c7fb47d1775962a0b4abcbc85aed4807d8b512467eaf6/sqlmesh-0.164.0-py3-none-any.whl", hash = "sha256:36ce7546f929b86884673fa1be68955f895797f07e0629e312f5cdb1da26416b", size = 5378661 },
+]
+
+[[package]]
+name = "sse-starlette"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/a4/80d2a11af59fe75b48230846989e93979c892d3a20016b42bb44edb9e398/sse_starlette-2.2.1.tar.gz", hash = "sha256:54470d5f19274aeed6b2d473430b08b4b379ea851d953b11d7f1c4a2c118b419", size = 17376 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/e0/5b8bd393f27f4a62461c5cf2479c75a2cc2ffa330976f9f00f5f6e4f50eb/sse_starlette-2.2.1-py3-none-any.whl", hash = "sha256:6410a3d3ba0c89e7675d4c273a301d64649c03a5ef1ca101f10b47f895fd0e99", size = 10120 },
 ]
 
 [[package]]
