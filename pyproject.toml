@@ -1,6 +1,6 @@
 [project]
 name = "dagster-sqlmesh"
-version = "0.8.0"
+version = "0.9.0a1"
 description = ""
 authors = [
     {name = "Reuven Gonzales", email = "reuven@karibalabs.co"}
