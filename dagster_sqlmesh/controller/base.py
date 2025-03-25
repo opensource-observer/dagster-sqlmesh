@@ -128,9 +128,7 @@ class SQLMeshInstance:
         self.logger = logger
 
     @contextmanager
-    def console_context(
-        self, handler: ConsoleEventHandler
-    ) -> t.Iterator[None]:
+    def console_context(self, handler: ConsoleEventHandler) -> t.Iterator[None]:
         id = self.console.add_handler(handler)
         yield
         self.console.remove_handler(id)
@@ -224,9 +222,7 @@ class SQLMeshInstance:
 
             thread.join()
 
-    def run(
-        self, **run_options: t.Unpack[RunOptions]
-    ) -> t.Iterator[ConsoleEvent]:
+    def run(self, **run_options: t.Unpack[RunOptions]) -> t.Iterator[ConsoleEvent]:
         """Executes sqlmesh run in a separate thread with console output.
 
         This method executes SQLMesh operations in a dedicated thread while
@@ -295,7 +291,7 @@ class SQLMeshInstance:
         end: TimeLike | None = None,
         categorizer: SnapshotCategorizer | None = None,
         default_catalog: str | None = None,
-        plan_options: PlanOptions | None= None,
+        plan_options: PlanOptions | None = None,
         run_options: RunOptions | None = None,
         skip_run: bool = False,
     ) -> t.Iterator[ConsoleEvent]:
@@ -309,11 +305,11 @@ class SQLMeshInstance:
 
         if plan_options.get("select_models") or run_options.get("select_models"):
             raise ValueError(
-                "select_models should not be set in plan_options or run_options use the `select_models` or `select_models_func` arguments instead"
+                "select_models should not be set in plan_options or run_options use the `select_models` option instead"
             )
         if plan_options.get("restate_models"):
             raise ValueError(
-                "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` or `select_models_func` instead"
+                "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` instead"
             )
         select_models = select_models or []
 
@@ -351,6 +347,16 @@ class SQLMeshInstance:
 
     def models_dag(self) -> DAG[str]:
         return self.context.dag
+
+    def non_external_models_dag(self) -> t.Iterable[tuple[Model, set[str]]]:
+        dag = self.context.dag
+
+        for model_fqn, deps in dag.graph.items():
+            logger.debug(f"model found: {model_fqn}")
+            model = self.context.get_model(model_fqn)
+            if not model:
+                continue
+            yield (model, deps)
 
 
 class SQLMeshController:

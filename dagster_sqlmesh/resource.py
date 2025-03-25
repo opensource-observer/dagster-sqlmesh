@@ -1,11 +1,7 @@
 import logging
 import typing as t
 
-from dagster import (
-    AssetExecutionContext,
-    ConfigurableResource,
-    MaterializeResult,
-)
+from dagster import AssetExecutionContext, ConfigurableResource, MaterializeResult
 from sqlmesh import Model
 from sqlmesh.core.context import Context as SQLMeshContext
 from sqlmesh.core.snapshot import Snapshot
@@ -14,7 +10,8 @@ from sqlmesh.utils.date import TimeLike
 
 from . import console
 from .config import SQLMeshContextConfig
-from .controller import PlanOptions, RunOptions, SQLMeshController
+from .controller import PlanOptions, RunOptions
+from .controller.dagster import DagsterSQLMeshController
 from .utils import sqlmesh_model_name_to_key
 
 
@@ -250,6 +247,7 @@ class SQLMeshResource(ConfigurableResource):
         logger = context.log
 
         controller = self.get_controller(logger)
+
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
 
@@ -257,6 +255,9 @@ class SQLMeshResource(ConfigurableResource):
 
             models = mesh.models()
             models_map = models.copy()
+            all_available_models = set(
+                [model.name for model, _ in mesh.non_external_models_dag()]
+            )
             if context.selected_output_names:
                 models_map = {}
                 for key, model in models.items():
@@ -268,6 +269,14 @@ class SQLMeshResource(ConfigurableResource):
 
                         models_map[key] = model
                         select_models.append(model.name)
+            selected_models_set = set(models_map.keys())
+
+            if all_available_models == selected_models_set:
+                logger.info("all models selected")
+
+                # Setting this to none to allow sqlmesh to select all models and
+                # also remove any models
+                select_models = None
 
             event_handler = DagsterSQLMeshEventHandler(
                 context, models_map, dag, "sqlmesh: "
@@ -285,7 +294,7 @@ class SQLMeshResource(ConfigurableResource):
 
     def get_controller(
         self, log_override: logging.Logger | None = None
-    ) -> SQLMeshController:
-        return SQLMeshController.setup_with_config(
+    ) -> DagsterSQLMeshController:
+        return DagsterSQLMeshController.setup_with_config(
             self.config, log_override=log_override
         )

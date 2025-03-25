@@ -1,6 +1,4 @@
-from dagster_sqlmesh.asset import (
-    SQLMeshDagsterTranslator,
-)
+from dagster_sqlmesh.asset import SQLMeshDagsterTranslator
 from dagster_sqlmesh.conftest import SQLMeshTestContext
 
 
