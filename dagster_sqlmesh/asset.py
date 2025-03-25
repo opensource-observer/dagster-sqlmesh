@@ -1,11 +1,7 @@
 import logging
 import typing as t
 
-from dagster import (
-    AssetsDefinition,
-    RetryPolicy,
-    multi_asset,
-)
+from dagster import AssetsDefinition, RetryPolicy, multi_asset
 
 from dagster_sqlmesh.controller import DagsterSQLMeshController
 from dagster_sqlmesh.translator import SQLMeshDagsterTranslator

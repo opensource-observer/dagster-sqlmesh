@@ -12,11 +12,7 @@ from sqlmesh.core.environment import EnvironmentNamingInfo
 from sqlmesh.core.linter.rule import RuleViolation
 from sqlmesh.core.model import Model
 from sqlmesh.core.plan import EvaluatablePlan, PlanBuilder
-from sqlmesh.core.snapshot import (
-    Snapshot,
-    SnapshotChangeCategory,
-    SnapshotInfoLike,
-)
+from sqlmesh.core.snapshot import Snapshot, SnapshotChangeCategory, SnapshotInfoLike
 from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.utils.concurrency import NodeExecutionFailedError
 
