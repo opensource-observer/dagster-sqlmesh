@@ -154,23 +154,10 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
     }
     print(f"final_counts: {final_counts}")
     print(
-        f"intermediate_model_1: {
-            (
-                sample_sqlmesh_test_context.query(
-                    'SELECT * FROM sqlmesh_example__dev.intermediate_model_1',
-                    return_df=True,
-                )
-            )
-        }"
+        f"intermediate_model_1: {sample_sqlmesh_test_context.query('SELECT * FROM sqlmesh_example__dev.intermediate_model_1', return_df=True)}"
     )
     print(
-        f"full_model: {
-            (
-                sample_sqlmesh_test_context.query(
-                    'SELECT * FROM sqlmesh_example__dev.full_model', return_df=True
-                )
-            )
-        }"
+        f"full_model: {sample_sqlmesh_test_context.query('SELECT * FROM sqlmesh_example__dev.full_model', return_df=True)}"
     )
 
     # Verify counts match expectations
