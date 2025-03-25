@@ -19,7 +19,6 @@ from sqlmesh.core.console import get_console
 from sqlmesh.utils.date import TimeLike
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
-from dagster_sqlmesh.console import ConsoleEvent
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 from dagster_sqlmesh.events import ConsoleRecorder
@@ -125,7 +124,7 @@ class SQLMeshTestContext:
         """
         model_path = self.get_model_path(model_name)
         if not hasattr(self, "_backed_up_files"):
-            self._backed_up_files = set()
+            self._backed_up_files: set[str] = set()
 
         # Create backup if not already done
         if model_name not in self._backed_up_files:
@@ -307,7 +306,7 @@ class SQLMeshTestContext:
         skip_run: bool = False,
         plan_options: PlanOptions | None = None,
         run_options: RunOptions | None = None,
-    ) -> t.Iterator[ConsoleEvent] | None:
+    ) -> None:
         """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
 
         Args:

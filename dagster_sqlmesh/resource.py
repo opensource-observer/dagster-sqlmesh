@@ -33,7 +33,7 @@ class MaterializationTracker:
 
     def plan(self, batches: dict[Snapshot, int]) -> None:
         self._batches = batches
-        self._count: dict[Snapshot, int] = {}
+        self._count = {}
 
         incomplete_names = set()
         for snapshot, count in self._batches.items():
