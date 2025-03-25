@@ -1,6 +1,8 @@
 import logging
 
+import pandas as pd
 import pytest
+from pandas.testing import assert_frame_equal
 
 from dagster_sqlmesh.controller.base import PlanOptions
 from tests.conftest import SQLMeshTestContext
@@ -59,7 +61,6 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         environment="dev",
     )
 
-
     print(
         f"intermediate_model_1 first run: {
             sample_sqlmesh_test_context.query(
@@ -95,16 +96,14 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         main.id,
         main.item_id,
         main.event_date,
-        CONCAT(sub.item_name, ' - modified1') as item_name
+        CONCAT('item - ', main.item_id) as item_name
         FROM sqlmesh_example.staging_model_1 AS main
         INNER JOIN sqlmesh_example.staging_model_2 as sub
         ON main.id = sub.id
         WHERE
         event_date BETWEEN @start_date AND @end_date
-
         """,
     )
-
 
     # Run with specified flags
     sample_sqlmesh_test_context.plan_and_run(
@@ -112,6 +111,7 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         plan_options=PlanOptions(
             skip_backfill=skip_backfill,
             enable_preview=True,
+            skip_tests=True,
         ),
     )
 
@@ -133,8 +133,40 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         }"
     )
 
-    raise Exception("Stop here")
+    full_model_df = (
+        sample_sqlmesh_test_context.query(
+            """
+        SELECT *
+        FROM sqlmesh_example__dev.full_model
+        """,
+            return_df=True,
+        )
+        .sort_values(by="item_id")
+        .reset_index(drop=True)
+    )
 
+    expected_full_model_df = (
+        pd.DataFrame(
+            {
+                "item_id": pd.Series([1, 2, 3], dtype="int32"),
+                "item_name": ["item - 1", "item - 2", "item - 3"],
+                "num_orders": [5, 1, 1],
+            }
+        )
+        .sort_values(by="item_id")
+        .reset_index(drop=True)
+    )
+
+    print("full_model_df")
+    print(full_model_df.drop(columns=["last_updated_at"]))
+    print("expected_full_model_df")
+    print(expected_full_model_df)
+
+    assert_frame_equal(
+        full_model_df.drop(columns=["last_updated_at"]),
+        expected_full_model_df,
+        check_like=True,
+    )
 
 
 if __name__ == "__main__":
