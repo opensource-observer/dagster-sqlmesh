@@ -111,7 +111,7 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         plan_options=PlanOptions(
             skip_backfill=skip_backfill,
             enable_preview=True,
-            skip_tests=True,
+            skip_tests=True,  # This is because the test_full_model.yaml is not updated to reflect the new model changes
         ),
     )
 
@@ -153,8 +153,6 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
                 "num_orders": [5, 1, 1],
             }
         )
-        .sort_values(by="item_id")
-        .reset_index(drop=True)
     )
 
     print("full_model_df")
