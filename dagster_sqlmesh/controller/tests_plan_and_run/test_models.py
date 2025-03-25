@@ -2,8 +2,8 @@ import logging
 
 import pytest
 
+from dagster_sqlmesh.conftest import SQLMeshTestContext
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
-from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 

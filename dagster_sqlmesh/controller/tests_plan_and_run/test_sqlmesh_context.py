@@ -3,8 +3,8 @@ import logging
 import polars
 import pytest
 
+from dagster_sqlmesh.conftest import SQLMeshTestContext
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
-from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     SELECT COUNT(*) as items FROM sqlmesh_example__dev.staging_model_1
     """
     )
-    assert staging_model_count[0][0] == 7
+    assert staging_model_count[0][0] == 8
 
 
 def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
@@ -61,7 +61,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1
     """
     )
-    assert staging_model_count[0][0] == 7
+    assert staging_model_count[0][0] == 8
 
     test_source_model_count = sample_sqlmesh_test_context.query(
         """
@@ -96,7 +96,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1
     """
     )
-    assert staging_model_count[0][0] == 7
+    assert staging_model_count[0][0] == 8
 
     test_source_model_count = sample_sqlmesh_test_context.query(
         """

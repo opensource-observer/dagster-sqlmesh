@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
+from dagster_sqlmesh.conftest import SQLMeshTestContext
 from dagster_sqlmesh.controller.base import PlanOptions
-from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 

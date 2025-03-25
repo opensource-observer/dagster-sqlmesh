@@ -1,8 +1,8 @@
 import pytest
 
+from dagster_sqlmesh.conftest import SQLMeshTestContext
 from dagster_sqlmesh.controller.base import PlanOptions
 from dagster_sqlmesh.utils import snapshot_id_to_model_name
-from tests.conftest import SQLMeshTestContext
 
 
 def test_given_basic_plan_when_building_then_returns_expected_plan_properties(

@@ -2,8 +2,8 @@ import logging
 
 import pytest
 
+from dagster_sqlmesh.conftest import SQLMeshTestContext
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
-from tests.conftest import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,6 @@ def test_given_seed_model_when_selected_then_only_builds_seed(
         run_options=RunOptions(
             execution_time="2024-07-15",
         ),
-        
         select_models=["sqlmesh_example.seed_model_1"],
     )
 
