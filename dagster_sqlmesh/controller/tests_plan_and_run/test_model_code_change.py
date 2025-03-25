@@ -11,10 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(
-    "no_auto_upstream,skip_backfill,expected_changes",
+    "skip_backfill,expected_changes",
     [
         (
-            False,
             False,
             {
                 "staging_1": ">=",  # Should increase (skip_backfill disabled)
@@ -25,13 +24,12 @@ logger = logging.getLogger(__name__)
         ),
     ],
     ids=[
-        "only_skip_backfill",
+        "skip_backfill = False",
     ],
 )
 # @pytest.mark.skip(reason="Work in progress test")
 def test_given_model_chain_when_running_with_different_flags_then_behaves_as_expected(
     sample_sqlmesh_test_context: SQLMeshTestContext,
-    no_auto_upstream: bool,
     skip_backfill: bool,
     expected_changes: dict[str, str],
 ):
