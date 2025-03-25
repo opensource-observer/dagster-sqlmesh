@@ -10,7 +10,7 @@ from sqlmesh.core.config import CategorizerConfig
 from sqlmesh.core.console import Console, set_console
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
-from sqlmesh.core.plan import PlanBuilder
+from sqlmesh.core.plan import Plan, PlanBuilder
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 
@@ -128,19 +128,117 @@ class SQLMeshInstance:
         self.logger = logger
 
     @contextmanager
-    def console_context(
-        self, handler: ConsoleEventHandler
-    ) -> t.Iterator[None]:
+    def console_context(self, handler: ConsoleEventHandler) -> t.Iterator[None]:
         id = self.console.add_handler(handler)
         yield
         self.console.remove_handler(id)
+
+    def _get_plan_summary(self, plan: Plan) -> str:
+        """
+        Get a summary of the plan and return it as a string.
+
+        Args:
+            plan (Plan): The plan to summarize.
+
+        Returns:
+            str: A summary of the plan.
+        """
+        directly_modified = len(plan.directly_modified)
+        indirectly_modified = sum(
+            len(deps) for deps in plan.indirectly_modified.values()
+        )
+
+        plan_summary = [
+            "SQLMesh Plan Summary:",
+            f"• Models: {directly_modified} direct changes, {indirectly_modified} indirect changes",
+            "• Direct Modifications:",
+        ]
+
+        # Add directly modified models
+        for model in sorted(plan.directly_modified):
+            plan_summary.append(f"  - {model}")
+
+        # Add indirectly modified models and their parents
+        if plan.indirectly_modified:
+            plan_summary.append("• Indirect Modifications:")
+            for parent, children in sorted(plan.indirectly_modified.items()):
+                plan_summary.append(f"  - Due to {parent}:")
+                for child in sorted(children):
+                    plan_summary.append(f"    • {child}")
+
+        # Add restatements if any exist
+        if plan.restatements:
+            plan_summary.append("• Restatements:")
+            for model, interval in sorted(plan.restatements.items()):
+                plan_summary.append(f"  - {model}: {interval}")
+
+        plan_summary.extend(
+            [
+                f"• Time Range: {plan.provided_start or 'default'} → {plan.provided_end or 'default'}",
+                "• Configuration:",
+                f"  - Skip Backfill: {plan.skip_backfill}",
+                f"  - Forward Only: {plan.forward_only}",
+                f"  - No Gaps: {plan.no_gaps}",
+                f"  - Include Unmodified: {plan.include_unmodified}",
+                f"  - Empty Backfill: {plan.empty_backfill}",
+                f"  - End Bounded: {plan.end_bounded}",
+                f"  - Is Dev Environment: {plan.is_dev}",
+            ]
+        )
+
+        if plan.skip_backfill:
+            plan_summary.append("• Backfill: DISABLED (skip_backfill=True)")
+        else:
+            plan_summary.append("• Backfill:")
+            if plan.selected_models_to_backfill:
+                plan_summary.append(
+                    f"  - User Selected: {sorted(plan.selected_models_to_backfill)}"
+                )
+            if plan.models_to_backfill:
+                additional = plan.models_to_backfill - (
+                    plan.selected_models_to_backfill or set()
+                )
+                if additional:
+                    plan_summary.append(f"  - Auto-detected: {sorted(additional)}")
+            if not (plan.selected_models_to_backfill or plan.models_to_backfill):
+                plan_summary.append("  - None required")
+
+        return "\n".join(plan_summary)
+
+    def _get_builder(
+        self, context: Context, environment: str, plan_options: PlanOptions
+    ) -> PlanBuilder:
+        return context.plan_builder(
+            environment=environment,
+            **plan_options,
+        )
+
+    def _build_plan(
+        self,
+        builder: PlanBuilder,
+    ) -> Plan:
+        """Build a SQLMesh plan without applying it.
+
+        Args:
+            builder: PlanBuilder instance to use for building the plan
+
+        Returns:
+            Plan
+        """
+        plan: Plan = builder.build()
+        plan_str = self._get_plan_summary(plan)
+
+        logger.debug("dagster-sqlmesh: plan")
+        logger.info(f"Plan Summary: {plan_str}")
+
+        return plan
 
     def plan(
         self,
         categorizer: SnapshotCategorizer | None = None,
         default_catalog: str | None = None,
         **plan_options: t.Unpack[PlanOptions],
-    ) -> t.Iterator[ConsoleEvent]:
+    ) -> t.Generator[ConsoleEvent, None, None]:
         """
         Executes a sqlmesh plan operation in a separate thread and yields
         console events.
@@ -176,14 +274,22 @@ class SQLMeshInstance:
         ) -> None:
             logger.debug("dagster-sqlmesh: thread started")
             try:
-                builder = t.cast(
-                    PlanBuilder,
-                    context.plan_builder(
-                        environment=environment,
-                        **plan_options,
-                    ),
+                builder: PlanBuilder = self._get_builder(
+                    context=context,
+                    environment=environment,
+                    plan_options=plan_options,
                 )
+
+                plan: Plan = self._build_plan(
+                    builder=builder,
+                )
+                plan_str = self._get_plan_summary(plan)
+
+                print(f"plan_str: {plan_str}")
+
                 logger.debug("dagster-sqlmesh: plan")
+                logger.info(f"Plan Summary: {plan_str}")
+
                 controller.console.plan(
                     builder,
                     auto_apply=True,
@@ -224,9 +330,7 @@ class SQLMeshInstance:
 
             thread.join()
 
-    def run(
-        self, **run_options: t.Unpack[RunOptions]
-    ) -> t.Iterator[ConsoleEvent]:
+    def run(self, **run_options: t.Unpack[RunOptions]) -> t.Iterator[ConsoleEvent]:
         """Executes sqlmesh run in a separate thread with console output.
 
         This method executes SQLMesh operations in a dedicated thread while
@@ -295,7 +399,7 @@ class SQLMeshInstance:
         end: TimeLike | None = None,
         categorizer: SnapshotCategorizer | None = None,
         default_catalog: str | None = None,
-        plan_options: PlanOptions | None= None,
+        plan_options: PlanOptions | None = None,
         run_options: RunOptions | None = None,
         skip_run: bool = False,
     ) -> t.Iterator[ConsoleEvent]:

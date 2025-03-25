@@ -19,7 +19,6 @@ from sqlmesh.core.console import get_console
 from sqlmesh.utils.date import TimeLike
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
-from dagster_sqlmesh.console import ConsoleEvent
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 from dagster_sqlmesh.events import ConsoleRecorder
@@ -36,7 +35,7 @@ def setup_debug_logging_for_tests() -> None:
 
 
 @pytest.fixture
-def sample_sqlmesh_project() -> t.Iterator[str]:
+def sample_sqlmesh_project() -> t.Generator[str, None, None]:
     """Creates a temporary sqlmesh project by copying the sample project"""
     with tempfile.TemporaryDirectory() as tmp_dir:
         project_dir = shutil.copytree(
@@ -56,6 +55,7 @@ class SQLMeshTestContext:
 
     db_path: str
     context_config: SQLMeshContextConfig
+    project_path: str
 
     def create_controller(
         self, enable_debug_console: bool = False
@@ -67,9 +67,100 @@ class SQLMeshTestContext:
             self.context_config, debug_console=console
         )
 
-    def query(self, *args: t.Any, **kwargs: t.Any) -> t.Any:
-        conn = duckdb.connect(self.db_path)
-        return conn.sql(*args, **kwargs).fetchall()
+    def get_model_path(self, model_name: str) -> str:
+        """Get the full path to a model file.
+
+        Args:
+            model_name: The name of the model file (e.g. 'staging_model_1.sql')
+
+        Returns:
+            str: Full path to the model file
+        """
+        # Common model directories to search
+        model_dirs = [
+            os.path.join(self.project_path, "models"),
+            os.path.join(self.project_path, "models", "staging"),
+            os.path.join(self.project_path, "models", "intermediate"),
+            os.path.join(self.project_path, "models", "mart"),
+        ]
+
+        for directory in model_dirs:
+            if not os.path.exists(directory):
+                continue
+            for root, _, files in os.walk(directory):
+                if model_name in files:
+                    return os.path.join(root, model_name)
+
+        raise FileNotFoundError(f"Model file {model_name} not found in project")
+
+    def backup_model_file(self, model_name: str) -> None:
+        """Create a backup of a model file.
+
+        Args:
+            model_name: The name of the model file to backup
+        """
+        model_path = self.get_model_path(model_name)
+        backup_path = f"{model_path}.bak"
+        shutil.copy2(model_path, backup_path)
+
+    def restore_model_file(self, model_name: str) -> None:
+        """Restore a model file from its backup.
+
+        Args:
+            model_name: The name of the model file to restore
+        """
+        model_path = self.get_model_path(model_name)
+        backup_path = f"{model_path}.bak"
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, model_path)
+            os.remove(backup_path)
+
+    def modify_model_file(self, model_name: str, new_content: str) -> None:
+        """Modify a model file with new content, creating a backup first.
+
+        Args:
+            model_name: The name of the model file to modify
+            new_content: The new content for the model file
+        """
+        model_path = self.get_model_path(model_name)
+        if not hasattr(self, "_backed_up_files"):
+            self._backed_up_files: set[str] = set()
+
+        # Create backup if not already done
+        if model_name not in self._backed_up_files:
+            self.backup_model_file(model_name)
+            self._backed_up_files.add(model_name)
+
+        # Write new content
+        with open(model_path, "w") as f:
+            f.write(new_content)
+
+    def cleanup_modified_files(self) -> None:
+        """Restore all modified model files from their backups."""
+        if hasattr(self, "_backed_up_files"):
+            for model_name in self._backed_up_files:
+                self.restore_model_file(model_name)
+            self._backed_up_files.clear()
+
+    def query(self, *args: t.Any, return_df: bool = False, **kwargs: t.Any) -> t.Any:
+        """Execute a query against the test database.
+
+        Args:
+            *args: Arguments to pass to DuckDB's sql method
+            **kwargs: Keyword arguments to pass to DuckDB's sql method
+
+        Returns:
+            For SELECT queries: Query results as a list of tuples
+            For DDL/DML queries: None
+        """
+        with duckdb.connect(self.db_path) as conn:
+            result = conn.sql(*args, **kwargs)
+            # Only try to fetch results if it's a SELECT query
+            if result is not None:
+                if return_df:
+                    return result.to_df()
+                return result.fetchall()
+            return None
 
     def initialize_test_source(self) -> None:
         conn = duckdb.connect(self.db_path)
@@ -101,7 +192,7 @@ class SQLMeshTestContext:
         """
         )
 
-    def plan_and_run(
+    def plan(
         self,
         *,
         environment: str,
@@ -109,10 +200,9 @@ class SQLMeshTestContext:
         enable_debug_console: bool = False,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
-        select_models: list[str] | None = None,
-        restate_selected: bool = False,
-        skip_run: bool = False,
-    ) -> t.Iterator[ConsoleEvent] | None:
+        plan_options: PlanOptions | None = None,
+        restate_models: list[str] | None = None,
+    ) -> None:
         """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
 
         Args:
@@ -121,6 +211,7 @@ class SQLMeshTestContext:
             enable_debug_console (bool, optional): Flag to enable debug console. Defaults to False.
             start (TimeLike, optional): Start time for the run interval. Defaults to None.
             end (TimeLike, optional): End time for the run interval. Defaults to None.
+            plan_options (PlanOptions, optional): Plan options for the plan. Defaults to None.
             restate_models (List[str], optional): List of models to restate. Defaults to None.
 
         Returns:
@@ -133,13 +224,124 @@ class SQLMeshTestContext:
         controller = self.create_controller(enable_debug_console=enable_debug_console)
         recorder = ConsoleRecorder()
         # controller.add_event_handler(ConsoleRecorder())
-        plan_options = PlanOptions(
-            enable_preview=True,
-        )
-        run_options = RunOptions()
+        if plan_options is None:
+            plan_options = PlanOptions(
+                enable_preview=True,
+            )
+
         if execution_time:
             plan_options["execution_time"] = execution_time
+        if restate_models:
+            plan_options["restate_models"] = restate_models
+        if start:
+            plan_options["start"] = start
+        if end:
+            plan_options["end"] = end
+
+        for event in controller.plan(
+            environment,
+            plan_options=plan_options,
+            categorizer=None,
+            default_catalog=None,
+        ):
+            recorder(event)
+
+    def run(
+        self,
+        *,
+        environment: str,
+        execution_time: TimeLike | None = None,
+        enable_debug_console: bool = False,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
+        run_options: RunOptions | None = None,
+        restate_models: list[str] | None = None,
+    ) -> None:
+        """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
+
+        Args:
+            environment (str): The environment to run SQLMesh in.
+            execution_time (TimeLike, optional): The execution timestamp for the run. Defaults to None.
+            enable_debug_console (bool, optional): Flag to enable debug console. Defaults to False.
+            start (TimeLike, optional): Start time for the run interval. Defaults to None.
+            end (TimeLike, optional): End time for the run interval. Defaults to None.
+            run_options (RunOptions, optional): Run options for the run. Defaults to None.
+            restate_models (List[str], optional): List of models to restate. Defaults to None.
+
+        Returns:
+            None: The function records events to a debug console but doesn't return anything.
+
+        Note:
+            TimeLike can be any time-like object that SQLMesh accepts (datetime, str, etc.).
+            The function creates a controller and recorder to capture all SQLMesh events during execution.
+        """
+        controller = self.create_controller(enable_debug_console=enable_debug_console)
+        recorder = ConsoleRecorder()
+        # controller.add_event_handler(ConsoleRecorder())
+        if run_options is None:
+            run_options = RunOptions()
+
+        if execution_time:
             run_options["execution_time"] = execution_time
+        if start:
+            run_options["start"] = start
+        if end:
+            run_options["end"] = end
+
+        for event in controller.run(
+            environment,
+            **run_options,
+        ):
+            recorder(event)
+
+    def plan_and_run(
+        self,
+        *,
+        environment: str,
+        enable_debug_console: bool = False,
+        start: TimeLike | None = None,
+        end: TimeLike | None = None,
+        select_models: list[str] | None = None,
+        restate_selected: bool = False,
+        skip_run: bool = False,
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
+    ) -> None:
+        """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
+
+        Args:
+            environment (str): The environment to run SQLMesh in.
+            enable_debug_console (bool, optional): Flag to enable debug console. Defaults to False.
+            start (TimeLike, optional): Start time for the run interval. Defaults to None.
+            end (TimeLike, optional): End time for the run interval. Defaults to None.
+            execution_time (TimeLike, optional): The execution timestamp for the run. Defaults to None.
+            select_models (List[str], optional): List of models to select. Defaults to None.
+            restate_selected (bool, optional): Flag to restate selected models. Defaults to False.
+            skip_run (bool, optional): Flag to skip the run. Defaults to False.
+            plan_options (PlanOptions, optional): Plan options for the plan. Defaults to None.
+            run_options (RunOptions, optional): Run options for the run. Defaults to None.
+
+        Returns:
+            None: The function records events to a debug console but doesn't return anything.
+
+        Note:
+            TimeLike can be any time-like object that SQLMesh accepts (datetime, str, etc.).
+            The function creates a controller and recorder to capture all SQLMesh events during execution.
+        """
+        controller = self.create_controller(enable_debug_console=enable_debug_console)
+        recorder = ConsoleRecorder()
+
+        plan_options = plan_options or PlanOptions(enable_preview=True)
+        run_options = run_options or RunOptions()
+
+        if plan_options.get("select_models") or run_options.get("select_models"):
+            raise ValueError(
+                "select_models should not be set in plan_options or run_options use the `select_models` or `select_models_func` arguments instead"
+            )
+        if plan_options.get("restate_models"):
+            raise ValueError(
+                "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` or `select_models_func` instead"
+            )
 
         for event in controller.plan_and_run(
             environment,
@@ -157,7 +359,7 @@ class SQLMeshTestContext:
 @pytest.fixture
 def sample_sqlmesh_test_context(
     sample_sqlmesh_project: str,
-) -> t.Iterator[SQLMeshTestContext]:
+) -> t.Generator[SQLMeshTestContext, None, None]:
     db_path = os.path.join(sample_sqlmesh_project, "db.db")
     config = SQLMeshConfig(
         gateways={
@@ -170,6 +372,88 @@ def sample_sqlmesh_test_context(
     context_config = SQLMeshContextConfig(
         path=sample_sqlmesh_project, gateway="local", config_override=config_as_dict
     )
-    test_context = SQLMeshTestContext(db_path=db_path, context_config=context_config)
+    test_context = SQLMeshTestContext(
+        db_path=db_path,
+        context_config=context_config,
+        project_path=sample_sqlmesh_project,
+    )
     test_context.initialize_test_source()
     yield test_context
+
+
+@pytest.fixture
+def permanent_sqlmesh_project() -> str:
+    """FOR DEBUGGING ONLY: Returns the path to the permanent sample SQLMesh project.
+
+    This fixture provides access to the sample project without copying to a temp directory,
+    which is useful for debugging and investigating issues with file handling.
+    It creates a permanent copy of the sample project in tests/temp/sqlmesh_project
+    if it doesn't exist.
+
+    Returns:
+        str: Absolute path to the sample SQLMesh project directory
+    """
+    # Define source and target paths
+    source_dir = os.path.abspath("sample/sqlmesh_project")
+    project_dir = os.path.abspath("tests/temp/sqlmesh_project")
+
+    # Create the temp directory if it doesn't exist
+    os.makedirs(os.path.dirname(project_dir), exist_ok=True)
+
+    # If project directory doesn't exist or is empty, copy from sample
+    if not os.path.exists(project_dir) or not os.listdir(project_dir):
+        if os.path.exists(project_dir):
+            shutil.rmtree(project_dir)
+        shutil.copytree(source_dir, project_dir)
+
+    # Clean up any existing db file
+    db_path = os.path.join(project_dir, "db.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    return project_dir
+
+
+@pytest.fixture
+def model_change_test_context(
+    permanent_sqlmesh_project: str,
+) -> t.Generator[SQLMeshTestContext, None, None]:
+    """FOR DEBUGGING ONLY: Creates a SQLMesh test context specifically for testing model code changes.
+
+    This fixture provides a context that allows modifying SQL model files and ensures
+    they are properly restored after the test completes. It uses a permanent project
+    directory instead of a temporary one for better debugging and investigation.
+
+    Args:
+        permanent_sqlmesh_project: The permanent project directory
+
+    Yields:
+        SQLMeshTestContext: A test context with additional methods for modifying model files
+    """
+    db_path = os.path.join(permanent_sqlmesh_project, "db.db")
+    config = SQLMeshConfig(
+        gateways={
+            "local": GatewayConfig(connection=DuckDBConnectionConfig(database=db_path)),
+        },
+        default_gateway="local",
+        model_defaults=ModelDefaultsConfig(dialect="duckdb"),
+    )
+    config_as_dict = config.dict()
+    context_config = SQLMeshContextConfig(
+        path=permanent_sqlmesh_project, gateway="local", config_override=config_as_dict
+    )
+    test_context = SQLMeshTestContext(
+        db_path=db_path,
+        context_config=context_config,
+        project_path=permanent_sqlmesh_project,
+    )
+    test_context.initialize_test_source()
+
+    yield test_context
+
+    # Cleanup: restore any modified files
+    # test_context.cleanup_modified_files()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

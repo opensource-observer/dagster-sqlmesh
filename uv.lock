@@ -302,6 +302,7 @@ dev = [
     { name = "dagster-webserver" },
     { name = "fastapi" },
     { name = "ipython" },
+    { name = "pandas-stubs" },
     { name = "pdbpp" },
     { name = "polars" },
     { name = "ruff" },
@@ -322,6 +323,7 @@ dev = [
     { name = "dagster-webserver", specifier = ">=1.8.1" },
     { name = "fastapi" },
     { name = "ipython", specifier = ">=8.26.0" },
+    { name = "pandas-stubs" },
     { name = "pdbpp", specifier = ">=0.10.3" },
     { name = "polars", specifier = ">=1.5.0" },
     { name = "ruff", specifier = ">=0.6.2" },
@@ -919,6 +921,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/20/e8/45a05d9c39d2cea61ab175dbe6a2de1d05b679e8de2011da4ee190d7e748/pandas-2.2.3-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:6dfcb5ee8d4d50c06a51c2fffa6cff6272098ad6540aed1a76d15fb9318194d8", size = 16359235 },
     { url = "https://files.pythonhosted.org/packages/1d/99/617d07a6a5e429ff90c90da64d428516605a1ec7d7bea494235e1c3882de/pandas-2.2.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:062309c1b9ea12a50e8ce661145c6aab431b1e99530d3cd60640e255778bd43a", size = 14056756 },
     { url = "https://files.pythonhosted.org/packages/29/d4/1244ab8edf173a10fd601f7e13b9566c1b525c4f365d6bee918e68381889/pandas-2.2.3-cp312-cp312-win_amd64.whl", hash = "sha256:59ef3764d0fe818125a5097d2ae867ca3fa64df032331b7e0917cf5d7bf66b13", size = 11504248 },
+]
+
+[[package]]
+name = "pandas-stubs"
+version = "2.2.3.250308"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "types-pytz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/5a/261f5c67a73e46df2d5984fe7129d66a3ed4864fd7aa9d8721abb3fc802e/pandas_stubs-2.2.3.250308.tar.gz", hash = "sha256:3a6e9daf161f00b85c83772ed3d5cff9522028f07a94817472c07b91f46710fd", size = 103986 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/64/ab61d9ca06ff66c07eb804ec27dec1a2be1978b3c3767caaa91e363438cc/pandas_stubs-2.2.3.250308-py3-none-any.whl", hash = "sha256:a377edff3b61f8b268c82499fdbe7c00fdeed13235b8b71d6a1dc347aeddc74d", size = 158053 },
 ]
 
 [[package]]
@@ -1697,6 +1712,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/eb/79/72064e6a701c2183016abbbfedaba506d81e30e232a68c9f0d6f6fcd1574/traitlets-5.14.3.tar.gz", hash = "sha256:9ed0579d3502c94b4b3732ac120375cda96f923114522847de4b3bb98b96b6b7", size = 161621 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/00/c0/8f5d070730d7836adc9c9b6408dec68c6ced86b304a9b26a14df072a6e8c/traitlets-5.14.3-py3-none-any.whl", hash = "sha256:b74e89e397b1ed28cc831db7aea759ba6640cb3de13090ca145426688ff1ac4f", size = 85359 },
+]
+
+[[package]]
+name = "types-pytz"
+version = "2025.1.0.20250318"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/ab/3910b323908a848e7852c3d0b2bdf0f027cc293dc1650c8911b16cd32227/types_pytz-2025.1.0.20250318.tar.gz", hash = "sha256:97e0e35184c6fe14e3a5014512057f2c57bb0c6582d63c1cfcc4809f82180449", size = 10450 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/7c/c94c1c3c8f4d70ca205ac94be714cfbe723fa93fdb9a41ca608ddd21de39/types_pytz-2025.1.0.20250318-py3-none-any.whl", hash = "sha256:04dba4907c5415777083f9548693c6d9f80ec53adcaff55a38526a3f8ddcae04", size = 10063 },
 ]
 
 [[package]]
