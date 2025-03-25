@@ -78,6 +78,20 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         }"
     )
 
+    # Store initial timestamp before making changes
+    full_model_df_initial = (
+        sample_sqlmesh_test_context.query(
+            """
+        SELECT *
+        FROM sqlmesh_example__dev.full_model
+        """,
+            return_df=True,
+        )
+        .sort_values(by="item_id")
+        .reset_index(drop=True)
+    )
+    last_updated_initial = full_model_df_initial["last_updated_at"].iloc[0]
+
     # # Modify intermediate_model_1 sql to cause breaking change
     sample_sqlmesh_test_context.modify_model_file(
         "intermediate_model_1.sql",
@@ -145,14 +159,12 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         .reset_index(drop=True)
     )
 
-    expected_full_model_df = (
-        pd.DataFrame(
-            {
-                "item_id": pd.Series([1, 2, 3], dtype="int32"),
-                "item_name": ["item - 1", "item - 2", "item - 3"],
-                "num_orders": [5, 1, 1],
-            }
-        )
+    expected_full_model_df = pd.DataFrame(
+        {
+            "item_id": pd.Series([1, 2, 3], dtype="int32"),
+            "item_name": ["item - 1", "item - 2", "item - 3"],
+            "num_orders": [5, 1, 1],
+        }
     )
 
     print("full_model_df")
@@ -164,6 +176,43 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         full_model_df.drop(columns=["last_updated_at"]),
         expected_full_model_df,
         check_like=True,
+    )
+
+    # Store the last_updated_at timestamps after the model change
+    last_updated_after_change = full_model_df["last_updated_at"].iloc[0]
+
+    # Verify the timestamp changed after the model modification
+    assert last_updated_after_change > last_updated_initial, (
+        "Expected last_updated_at timestamp to change after model modification"
+    )
+
+    # Run plan and run again with no changes
+    sample_sqlmesh_test_context.plan_and_run(
+        environment="dev",
+        plan_options=PlanOptions(
+            skip_backfill=skip_backfill,
+            enable_preview=True,
+            skip_tests=True,
+        ),
+    )
+
+    # Get the new timestamps
+    full_model_df_no_changes = (
+        sample_sqlmesh_test_context.query(
+            """
+        SELECT *
+        FROM sqlmesh_example__dev.full_model
+        """,
+            return_df=True,
+        )
+        .sort_values(by="item_id")
+        .reset_index(drop=True)
+    )
+    last_updated_no_changes = full_model_df_no_changes["last_updated_at"].iloc[0]
+
+    # Verify timestamps haven't changed
+    assert last_updated_after_change == last_updated_no_changes, (
+        "Expected last_updated_at timestamps to remain unchanged when no model changes were made"
     )
 
 
