@@ -256,7 +256,7 @@ class SQLMeshResource(ConfigurableResource):
             models = mesh.models()
             models_map = models.copy()
             all_available_models = set(
-                [model.name for model, _ in mesh.non_external_models_dag()]
+                [model.fqn for model, _ in mesh.non_external_models_dag()]
             )
             if context.selected_output_names:
                 models_map = {}
