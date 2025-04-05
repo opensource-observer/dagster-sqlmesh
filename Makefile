@@ -6,11 +6,19 @@ PYTHON_VENV_NAME := ".venv"
 VENV_NAME := .venv
 PYTHON := python
 
-PYTHON_CMD := $(CURDIR)/$(VENV_NAME)/bin/python
-SQLMESH_CMD := $(CURDIR)/$(VENV_NAME)/bin/sqlmesh
-UV_CMD := uv
-ACTIVATE := source $(CURDIR)/$(VENV_NAME)/bin/activate
-DEACTIVATE := deactivate
+ifeq ($(OS),Windows_NT)
+    PYTHON_CMD := $(CURDIR)/$(VENV_NAME)/Scripts/python
+    SQLMESH_CMD := $(CURDIR)/$(VENV_NAME)/Scripts/sqlmesh
+    UV_CMD := "$(subst \,/,$(USERPROFILE))/.local/bin/uv.exe"
+    ACTIVATE := source $(CURDIR)/$(VENV_NAME)/Scripts/activate
+    DEACTIVATE := source $(CURDIR)/$(VENV_NAME)/Scripts/deactivate
+else
+    PYTHON_CMD := $(CURDIR)/$(VENV_NAME)/bin/python
+    SQLMESH_CMD := $(CURDIR)/$(VENV_NAME)/bin/sqlmesh
+    UV_CMD := uv
+    ACTIVATE := source $(CURDIR)/$(VENV_NAME)/bin/activate
+    DEACTIVATE := deactivate
+endif
 
 init-python:
 	@if [ ! -d "$(PYTHON_VENV_NAME)" ]; then \
@@ -57,7 +65,8 @@ dagster-dev: clean-dagster
 dev: dagster-dev  # Alias for dagster-dev
 
 dagster-materialize:
-	$(PYTHON_CMD) -m dagster asset materialize -f sample/dagster_project/definitions.py --select '*'
+	"$(PYTHON_CMD)" -m dagster asset materialize -f "$(CURDIR)/sample/dagster_project/definitions.py" --select "test_source"
+
 
 sqlmesh-plan:
 	cd sample/sqlmesh_project && $(SQLMESH_CMD) plan
