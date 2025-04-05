@@ -194,4 +194,4 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    pytest.main(["-s", "-v", __file__])

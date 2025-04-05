@@ -37,18 +37,34 @@ def setup_debug_logging_for_tests() -> None:
 
 
 @pytest.fixture
-def sample_sqlmesh_project() -> t.Iterator[str]:
-    """Creates a temporary sqlmesh project by copying the sample project"""
+def sample_project_root() -> t.Iterator[str]:
+    """Creates a temporary project directory containing both SQLMesh and Dagster projects"""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        project_dir = shutil.copytree(
-            "sample/sqlmesh_project", os.path.join(tmp_dir, "project")
-        )
-        db_path = os.path.join(project_dir, "db.db")
-        if os.path.exists(db_path):
-            os.remove(os.path.join(project_dir, "db.db"))
+        project_dir = shutil.copytree("sample", tmp_dir, dirs_exist_ok=True)
+        yield project_dir
 
-        # Initialize the "source" data
-        yield str(project_dir)
+
+@pytest.fixture
+def sample_sqlmesh_project(sample_project_root: str) -> t.Iterator[str]:
+    """Returns path to the SQLMesh project within the sample project"""
+    sqlmesh_project_dir = os.path.join(sample_project_root, "sqlmesh_project")
+    db_path = os.path.join(sqlmesh_project_dir, "db.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    yield sqlmesh_project_dir
+
+
+@pytest.fixture
+def sample_dagster_project(sample_project_root: str) -> t.Iterator[str]:
+    """Returns path to the Dagster project within the sample project"""
+    dagster_project_dir = os.path.join(sample_project_root, "dagster_project")
+    sqlmesh_project_dir = os.path.join(sample_project_root, "sqlmesh_project")
+
+    db_path = os.path.join(sqlmesh_project_dir, "db.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    yield dagster_project_dir
 
 
 @dataclass
@@ -463,6 +479,43 @@ class DagsterTestContext:
 
     project_path: str
 
+    def _run_command (self, cmd: list[str]) -> None:
+        """Execute a command and stream its output in real-time.
+
+        Args:
+            cmd: List of command parts to execute
+
+        Raises:
+            subprocess.CalledProcessError: If the command returns non-zero exit code
+        """
+        print(f"Running command: {' '.join(cmd)}")
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+        )
+
+        # Stream output in real-time
+        while True:
+            stdout_line = process.stdout.readline() if process.stdout else ""
+            stderr_line = process.stderr.readline() if process.stderr else ""
+
+            if stdout_line:
+                print(stdout_line.rstrip())
+            if stderr_line:
+                print(stderr_line.rstrip())
+
+            process_finished = not stdout_line and not stderr_line and process.poll() is not None
+            if process_finished:
+                break
+
+        process_failed = process.returncode != 0
+        if process_failed:
+            raise subprocess.CalledProcessError(process.returncode, cmd)
+
     def asset_materialisation(
         self,
         assets: list[str],
@@ -476,8 +529,6 @@ class DagsterTestContext:
             plan_options: Optional SQLMesh plan options to pass to the config
             run_options: Optional SQLMesh run options to pass to the config
         """
-
-        # Construct the base config
         config: dict[str, t.Any] = {
             "resources": {
                 "sqlmesh": {
@@ -494,7 +545,6 @@ class DagsterTestContext:
                 k: v for k, v in plan_options.items() if v is not None
             }
 
-        # Add run options if provided
         if run_options:
             config["resources"]["sqlmesh"]["config"]["run_options_override"] = {
                 k: v for k, v in run_options.items() if v is not None
@@ -503,7 +553,6 @@ class DagsterTestContext:
         # Convert config to JSON string, escaping backslashes for Windows paths
         config_json = json.dumps(config).replace("\\", "\\\\")
 
-        # Construct the command
         cmd = [
             sys.executable,
             "-m",
@@ -518,8 +567,7 @@ class DagsterTestContext:
             config_json,
         ]
 
-        # Run the command
-        subprocess.run(cmd, check=True)
+        self._run_command(cmd)
 
     def reset_assets(self) -> None:
         """Resets the assets to the original state"""
@@ -528,27 +576,6 @@ class DagsterTestContext:
     def init_test_source(self) -> None:
         """Initialises the test source"""
         self.asset_materialisation(assets=["test_source"])
-
-
-
-@pytest.fixture
-def sample_dagster_project() -> t.Iterator[str]:
-    """Creates a temporary dagster project by copying the sample project"""
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        project_dir = shutil.copytree(
-            "sample",
-            tmp_dir,
-        )
-        dagster_project_dir = os.path.join(project_dir, "dagster_project")
-        sqlmesh_project_dir = os.path.join(project_dir, "sqlmesh_project")
-
-        db_path = os.path.join(sqlmesh_project_dir, "db.db")
-        if os.path.exists(db_path):
-            os.remove(os.path.join(sqlmesh_project_dir, "db.db"))
-
-        # Initialize the "source" data
-        yield str(dagster_project_dir)
-
 
 
 @pytest.fixture
