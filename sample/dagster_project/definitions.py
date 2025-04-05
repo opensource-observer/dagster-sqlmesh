@@ -53,7 +53,9 @@ def test_source() -> pl.DataFrame:
 
 
 @sqlmesh_assets(environment="dev", config=sqlmesh_config, enabled_subsetting=True)
-def sqlmesh_project(context: AssetExecutionContext, sqlmesh: SQLMeshResource) -> t.Iterator[MaterializeResult]:
+def sqlmesh_project(
+    context: AssetExecutionContext, sqlmesh: SQLMeshResource
+) -> t.Iterator[MaterializeResult]:
     yield from sqlmesh.run(context)
 
 
