@@ -57,7 +57,7 @@ clean-dagster:
 	rm -rf sample/dagster_project/storage sample/dagster_project/logs sample/dagster_project/history
 
 clean-db:
-	$(PYTHON_CMD) -c "import duckdb; conn = duckdb.connect('db.db'); [conn.execute(cmd[0]) for cmd in conn.execute(\"\"\"SELECT 'DROP TABLE ' || table_schema || '.' || table_name || ' CASCADE;' as drop_cmd FROM information_schema.tables WHERE table_schema != 'sources' AND table_schema != 'information_schema' AND table_type = 'BASE TABLE'\"\"\").fetchall()]; [conn.execute(cmd[0]) for cmd in conn.execute(\"\"\"SELECT 'DROP VIEW ' || table_schema || '.' || table_name || ' CASCADE;' as drop_cmd FROM information_schema.tables WHERE table_schema != 'sources' AND table_schema != 'information_schema' AND table_type = 'VIEW'\"\"\").fetchall()]; conn.close()"
+	"$(PYTHON_CMD)" -c "import duckdb; conn = duckdb.connect('db.db'); [conn.execute(cmd[0]) for cmd in conn.execute(\"\"\"SELECT 'DROP TABLE ' || table_schema || '.' || table_name || ' CASCADE;' as drop_cmd FROM information_schema.tables WHERE table_schema != 'sources' AND table_schema != 'information_schema' AND table_type = 'BASE TABLE'\"\"").fetchall()]; [conn.execute(cmd[0]) for cmd in conn.execute(\"\"\"SELECT 'DROP VIEW ' || table_schema || '.' || table_name || ' CASCADE;' as drop_cmd FROM information_schema.tables WHERE table_schema != 'sources' AND table_schema != 'information_schema' AND table_type = 'VIEW'\"\"").fetchall()]; conn.close()"
 
 dagster-dev: clean-dagster
 	@DAGSTER_HOME="$(subst \,/,$(CURDIR))/sample/dagster_project" "$(PYTHON_CMD)" -m dagster dev -f sample/dagster_project/definitions.py -h 0.0.0.0
@@ -65,8 +65,10 @@ dagster-dev: clean-dagster
 dev: dagster-dev  # Alias for dagster-dev
 
 dagster-materialize:
-	"$(PYTHON_CMD)" -m dagster asset materialize -f "$(CURDIR)/sample/dagster_project/definitions.py" --select "test_source"
-
+	"$(PYTHON_CMD)" -m dagster asset materialize \
+		-f "$(CURDIR)/sample/dagster_project/definitions.py" \
+		--select "intermediate_model_1" \
+		--config-json '{"resources": {"sqlmesh": {"config": {"config": {"gateway": "local", "path": "C:\\\\Users\\\\kevin\\\\git_repos\\\\dagster-sqlmesh - Copy\\\\sample\\\\sqlmesh_project"}, "plan_options_override": {"skip_backfill": false}}}}}'
 
 sqlmesh-plan:
 	cd sample/sqlmesh_project && $(SQLMESH_CMD) plan

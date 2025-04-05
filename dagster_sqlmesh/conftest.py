@@ -1,6 +1,8 @@
+import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import typing as t
@@ -35,7 +37,7 @@ def setup_debug_logging_for_tests() -> None:
 
 
 @pytest.fixture
-def sample_sqlmesh_project() -> t.Generator[str, None, None]:
+def sample_sqlmesh_project() -> t.Iterator[str]:
     """Creates a temporary sqlmesh project by copying the sample project"""
     with tempfile.TemporaryDirectory() as tmp_dir:
         project_dir = shutil.copytree(
@@ -359,7 +361,7 @@ class SQLMeshTestContext:
 @pytest.fixture
 def sample_sqlmesh_test_context(
     sample_sqlmesh_project: str,
-) -> t.Generator[SQLMeshTestContext, None, None]:
+) -> t.Iterator[SQLMeshTestContext]:
     db_path = os.path.join(sample_sqlmesh_project, "db.db")
     config = SQLMeshConfig(
         gateways={
@@ -417,7 +419,7 @@ def permanent_sqlmesh_project() -> str:
 @pytest.fixture
 def model_change_test_context(
     permanent_sqlmesh_project: str,
-) -> t.Generator[SQLMeshTestContext, None, None]:
+) -> t.Iterator[SQLMeshTestContext]:
     """FOR DEBUGGING ONLY: Creates a SQLMesh test context specifically for testing model code changes.
 
     This fixture provides a context that allows modifying SQL model files and ensures
@@ -453,6 +455,110 @@ def model_change_test_context(
 
     # Cleanup: restore any modified files
     # test_context.cleanup_modified_files()
+
+
+@dataclass
+class DagsterTestContext:
+    """A test context for running Dagster"""
+
+    project_path: str
+
+    def asset_materialisation(
+        self,
+        assets: list[str],
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
+    ) -> None:
+        """Materialises the given Dagster assets using CLI command.
+
+        Args:
+            assets: String of comma-separated asset names to materialize
+            plan_options: Optional SQLMesh plan options to pass to the config
+            run_options: Optional SQLMesh run options to pass to the config
+        """
+
+        # Construct the base config
+        config: dict[str, t.Any] = {
+            "resources": {
+                "sqlmesh": {
+                    "config": {
+                        "config": {"gateway": "local", "path": self.project_path}
+                    }
+                }
+            }
+        }
+
+        # Add plan options if provided
+        if plan_options:
+            config["resources"]["sqlmesh"]["config"]["plan_options_override"] = {
+                k: v for k, v in plan_options.items() if v is not None
+            }
+
+        # Add run options if provided
+        if run_options:
+            config["resources"]["sqlmesh"]["config"]["run_options_override"] = {
+                k: v for k, v in run_options.items() if v is not None
+            }
+
+        # Convert config to JSON string, escaping backslashes for Windows paths
+        config_json = json.dumps(config).replace("\\", "\\\\")
+
+        # Construct the command
+        cmd = [
+            sys.executable,
+            "-m",
+            "dagster",
+            "asset",
+            "materialize",
+            "-f",
+            os.path.join(self.project_path, "definitions.py"),
+            "--select",
+            ",".join(assets),
+            "--config-json",
+            config_json,
+        ]
+
+        # Run the command
+        subprocess.run(cmd, check=True)
+
+    def reset_assets(self) -> None:
+        """Resets the assets to the original state"""
+        self.asset_materialisation(assets=["reset_asset"])
+
+    def init_test_source(self) -> None:
+        """Initialises the test source"""
+        self.asset_materialisation(assets=["test_source"])
+
+
+
+@pytest.fixture
+def sample_dagster_project() -> t.Iterator[str]:
+    """Creates a temporary dagster project by copying the sample project"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        project_dir = shutil.copytree(
+            "sample",
+            tmp_dir,
+        )
+        dagster_project_dir = os.path.join(project_dir, "dagster_project")
+        sqlmesh_project_dir = os.path.join(project_dir, "sqlmesh_project")
+
+        db_path = os.path.join(sqlmesh_project_dir, "db.db")
+        if os.path.exists(db_path):
+            os.remove(os.path.join(sqlmesh_project_dir, "db.db"))
+
+        # Initialize the "source" data
+        yield str(dagster_project_dir)
+
+
+
+@pytest.fixture
+def sample_dagster_test_context(
+    sample_dagster_project: str,
+) -> t.Iterator[DagsterTestContext]:
+    test_context = DagsterTestContext(
+        project_path=os.path.join(sample_dagster_project),
+    )
+    yield test_context
 
 
 if __name__ == "__main__":

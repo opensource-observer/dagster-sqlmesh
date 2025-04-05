@@ -228,7 +228,9 @@ class DagsterSQLMeshEventHandler:
 
 class SQLMeshResource(ConfigurableResource):
     config: SQLMeshContextConfig
-
+    plan_options_override: dict | None = None
+    run_options_override: dict | None = None
+    
     def run(
         self,
         context: AssetExecutionContext,
@@ -243,6 +245,20 @@ class SQLMeshResource(ConfigurableResource):
         """Execute SQLMesh based on the configuration given"""
         plan_options = plan_options or {}
         run_options = run_options or {}
+
+        if self.plan_options_override:
+            assert isinstance(self.plan_options_override, dict)
+            plan_options = PlanOptions(**self.plan_options_override)
+
+            if plan_options.get("select_models"):
+                raise ValueError("select_models is not allowed in plan_options")
+        
+        if self.run_options_override:
+            assert isinstance(self.run_options_override, dict)
+            run_options = RunOptions(**self.run_options_override)
+
+            if run_options.get("select_models"):
+                raise ValueError("select_models is not allowed in run_options")
 
         logger = context.log
 
@@ -273,6 +289,7 @@ class SQLMeshResource(ConfigurableResource):
                             select_models = []
                         
                         select_models.append(model.name)
+
             selected_models_set = set(models_map.keys())
 
             if all_available_models == selected_models_set:
