@@ -1,12 +1,7 @@
 import typing as t
 from dataclasses import dataclass, field
 
-from dagster import (
-    AssetCheckResult,
-    AssetKey,
-    AssetMaterialization,
-    AssetOut,
-)
+from dagster import AssetCheckResult, AssetKey, AssetMaterialization, AssetOut
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 from sqlmesh.core.model import Model
 

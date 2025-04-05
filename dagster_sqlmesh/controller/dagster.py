@@ -1,10 +1,6 @@
 import logging
 
-from dagster import (
-    AssetDep,
-    AssetKey,
-    AssetOut,
-)
+from dagster import AssetDep, AssetKey, AssetOut
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 
 from ..translator import SQLMeshDagsterTranslator
@@ -23,16 +19,10 @@ class DagsterSQLMeshController(SQLMeshController):
     ) -> SQLMeshMultiAssetOptions:
         with self.instance(environment, "to_asset_outs") as instance:
             context = instance.context
-            dag = context.dag
             output = SQLMeshMultiAssetOptions()
             depsMap: dict[str, CoercibleToAssetDep] = {}
 
-            for model_fqn, deps in dag.graph.items():
-                logger.debug(f"model found: {model_fqn}")
-                model = context.get_model(model_fqn)
-                if not model:
-                    # If no model is returned this seems to be an asset dependency
-                    continue
+            for model, deps in instance.non_external_models_dag():
                 asset_key = translator.get_asset_key_from_model(
                     context,
                     model,
