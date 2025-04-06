@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 
@@ -237,11 +238,13 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
 
     # sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"], plan_options=PlanOptions(skip_backfill=True, enable_preview=True, skip_tests=True))
 
+    time.sleep(5)
+
     intermediate_model_1_df = (
         sample_sqlmesh_test_context.query(
             """
         SELECT *
-        FROM sqlmesh_example.intermediate_model_1
+        FROM sqlmesh_example__dev.intermediate_model_1
         """,
             return_df=True,
         )

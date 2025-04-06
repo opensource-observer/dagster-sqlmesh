@@ -541,7 +541,7 @@ class DagsterTestContext:
     dagster_project_path: str
     sqlmesh_project_path: str
 
-    def _run_command(self, cmd: list[str]) -> None:
+    def _run_command(self, cmd: list[str], cwd: str | None = None) -> None:
         """Execute a command and stream its output in real-time.
 
         Args:
@@ -590,10 +590,10 @@ class DagsterTestContext:
 
         print(f"Running command: {' '.join(cmd)}")
         print(f"Current working directory: {os.getcwd()}")
-        print(f"Changing to directory: {self.dagster_project_path}")
 
-        # Change to the dagster project directory before running the command
-        os.chdir(self.dagster_project_path)
+        if cwd:
+            print(f"Changing to directory: {cwd}")
+            os.chdir(cwd)
 
         process = subprocess.Popen(
             cmd,
@@ -699,7 +699,8 @@ class DagsterTestContext:
             config_json,
         ]
 
-        self._run_command(cmd)
+        # Change to the sqlmesh project directory before running the command (for some reason asset materialize needs to be run from the dirctory you want the db.db file to be in - feel free to investigate)
+        self._run_command(cmd=cmd, cwd=self.sqlmesh_project_path)
 
     def reset_assets(self) -> None:
         """Resets the assets to the original state"""
