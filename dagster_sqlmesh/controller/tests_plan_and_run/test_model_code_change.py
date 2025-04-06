@@ -1,5 +1,4 @@
 import logging
-import time
 
 import pytest
 
@@ -196,7 +195,6 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
 
     sample_dagster_test_context.asset_materialisation(
         assets=[
-            "test_source",
             "seed_model_1",
             "seed_model_2",
             "staging_model_1",
@@ -210,35 +208,33 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
     )
 
     # # # Modify intermediate_model_1 sql to cause breaking change
-    # sample_sqlmesh_test_context.modify_model_file(
-    #     "intermediate_model_1.sql",
-    #     """
-    #     MODEL (
-    #     name sqlmesh_example.intermediate_model_1,
-    #     kind INCREMENTAL_BY_TIME_RANGE (
-    #         time_column event_date
-    #     ),
-    #     start '2020-01-01',
-    #     cron '@daily',
-    #     grain (id, event_date)
-    #     );
+    sample_sqlmesh_test_context.modify_model_file(
+        "intermediate_model_1.sql",
+        """
+        MODEL (
+        name sqlmesh_example.intermediate_model_1,
+        kind INCREMENTAL_BY_TIME_RANGE (
+            time_column event_date
+        ),
+        start '2020-01-01',
+        cron '@daily',
+        grain (id, event_date)
+        );
 
-    #     SELECT
-    #     main.id,
-    #     main.item_id,
-    #     main.event_date,
-    #     CONCAT('item - ', main.item_id) as item_name
-    #     FROM sqlmesh_example.staging_model_1 AS main
-    #     INNER JOIN sqlmesh_example.staging_model_2 as sub
-    #     ON main.id = sub.id
-    #     WHERE
-    #     event_date BETWEEN @start_date AND @end_date
-    #     """,
-    # )
+        SELECT
+        main.id,
+        main.item_id,
+        main.event_date,
+        CONCAT('item - ', main.item_id) as item_name
+        FROM sqlmesh_example.staging_model_1 AS main
+        INNER JOIN sqlmesh_example.staging_model_2 as sub
+        ON main.id = sub.id
+        WHERE
+        event_date BETWEEN @start_date AND @end_date
+        """,
+    )
 
-    # sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"], plan_options=PlanOptions(skip_backfill=True, enable_preview=True, skip_tests=True))
-
-    time.sleep(5)
+    sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"], plan_options=PlanOptions(skip_backfill=True, enable_preview=True, skip_tests=True))
 
     intermediate_model_1_df = (
         sample_sqlmesh_test_context.query(
