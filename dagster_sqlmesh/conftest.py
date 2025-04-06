@@ -479,7 +479,7 @@ class DagsterTestContext:
 
     project_path: str
 
-    def _run_command (self, cmd: list[str]) -> None:
+    def _run_command(self, cmd: list[str]) -> None:
         """Execute a command and stream its output in real-time.
 
         Args:
@@ -488,32 +488,82 @@ class DagsterTestContext:
         Raises:
             subprocess.CalledProcessError: If the command returns non-zero exit code
         """
+        import queue
+        import threading
+        import typing as t
+
+        def stream_output(
+            pipe: t.IO[str], output_queue: queue.Queue[str | None]
+        ) -> None:
+            """Stream output from a pipe to a queue."""
+            try:
+                while True:
+                    char = pipe.read(1)
+                    if not char:
+                        break
+                    output_queue.put(char)
+            finally:
+                output_queue.put(None)  # Signal EOF
+
         print(f"Running command: {' '.join(cmd)}")
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,
             universal_newlines=True,
         )
 
-        # Stream output in real-time
-        while True:
-            stdout_line = process.stdout.readline() if process.stdout else ""
-            stderr_line = process.stderr.readline() if process.stderr else ""
+        if not process.stdout or not process.stderr:
+            raise RuntimeError("Failed to open subprocess pipes")
 
-            if stdout_line:
-                print(stdout_line.rstrip())
-            if stderr_line:
-                print(stderr_line.rstrip())
+        # Create queues for stdout and stderr
+        stdout_queue: queue.Queue[str | None] = queue.Queue()
+        stderr_queue: queue.Queue[str | None] = queue.Queue()
 
-            process_finished = not stdout_line and not stderr_line and process.poll() is not None
-            if process_finished:
-                break
+        # Start threads to read from pipes
+        stdout_thread = threading.Thread(
+            target=stream_output, args=(process.stdout, stdout_queue)
+        )
+        stderr_thread = threading.Thread(
+            target=stream_output, args=(process.stderr, stderr_queue)
+        )
 
-        process_failed = process.returncode != 0
-        if process_failed:
+        stdout_thread.daemon = True
+        stderr_thread.daemon = True
+        stdout_thread.start()
+        stderr_thread.start()
+
+        # Read from queues and print output
+        stdout_done = False
+        stderr_done = False
+
+        while not (stdout_done and stderr_done):
+            # Handle stdout
+            try:
+                char = stdout_queue.get_nowait()
+                if char is None:
+                    stdout_done = True
+                else:
+                    print(char, end="", flush=True)
+            except queue.Empty:
+                pass
+
+            # Handle stderr
+            try:
+                char = stderr_queue.get_nowait()
+                if char is None:
+                    stderr_done = True
+                else:
+                    print(char, end="", flush=True)
+            except queue.Empty:
+                pass
+
+        stdout_thread.join()
+        stderr_thread.join()
+        process.wait()
+
+        if process.returncode != 0:
             raise subprocess.CalledProcessError(process.returncode, cmd)
 
     def asset_materialisation(

@@ -190,7 +190,13 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
     #     "Expected last_updated_at timestamps to remain unchanged when no model changes were made"
     # )
 
-    sample_dagster_test_context.init_test_source()
+    # sample_dagster_test_context.init_test_source()
+
+    sample_dagster_test_context.asset_materialisation(assets=["seed_model_1"])
+
+    # sample_dagster_test_context.asset_materialisation(assets=["test_source", "seed_model_1", "seed_model_2", "staging_model_1", "staging_model_2", "intermediate_model_1", "full_model"])
+
+    # sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"])
 
 
 if __name__ == "__main__":
