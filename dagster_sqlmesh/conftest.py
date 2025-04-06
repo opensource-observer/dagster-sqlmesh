@@ -1,11 +1,14 @@
 import datetime as dt
+import io
 import json
 import logging
 import os
+import queue
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import typing as t
 from dataclasses import dataclass, field
 
@@ -541,109 +544,124 @@ class DagsterTestContext:
     dagster_project_path: str
     sqlmesh_project_path: str
 
+    def _stream_output(
+        self,
+        pipe: t.IO[str],
+        output_queue: queue.Queue[tuple[str, str | None]],
+        process_stdout: t.IO[str],
+    ) -> None:
+        """Stream output from a pipe to a queue.
+
+        Args:
+            pipe: The pipe to read from (stdout or stderr)
+            output_queue: Queue to write output to, as (stream_type, line) tuples
+            process_stdout: The stdout pipe from the process, used to determine stream type
+        """
+        # Use a StringIO buffer to accumulate characters into lines
+        buffer = io.StringIO()
+        stream_type = "stdout" if pipe is process_stdout else "stderr"
+
+        try:
+            while True:
+                char = pipe.read(1)
+                if not char:
+                    # Flush any remaining content in buffer
+                    remaining = buffer.getvalue()
+                    if remaining:
+                        output_queue.put((stream_type, remaining))
+                    break
+
+                buffer.write(char)
+
+                # If we hit a newline, flush the buffer
+                if char == "\n":
+                    output_queue.put((stream_type, buffer.getvalue()))
+                    buffer = io.StringIO()
+        finally:
+            buffer.close()
+            output_queue.put((stream_type, None))  # Signal EOF
+
     def _run_command(self, cmd: list[str], cwd: str | None = None) -> None:
         """Execute a command and stream its output in real-time.
 
         Args:
             cmd: List of command parts to execute
+            cwd: Optional directory to change to before running the command.
 
         Raises:
             subprocess.CalledProcessError: If the command returns non-zero exit code
         """
-        import io
-        import queue
-        import threading
-        import typing as t
-
-        def stream_output(
-            pipe: t.IO[str], output_queue: queue.Queue[tuple[str, str | None]]
-        ) -> None:
-            """Stream output from a pipe to a queue.
-
-            Args:
-                pipe: The pipe to read from (stdout or stderr)
-                output_queue: Queue to write output to, as (stream_type, line) tuples
-            """
-            # Use a StringIO buffer to accumulate characters into lines
-            buffer = io.StringIO()
-            stream_type = "stdout" if pipe is process.stdout else "stderr"
-
-            try:
-                while True:
-                    char = pipe.read(1)
-                    if not char:
-                        # Flush any remaining content in buffer
-                        remaining = buffer.getvalue()
-                        if remaining:
-                            output_queue.put((stream_type, remaining))
-                        break
-
-                    buffer.write(char)
-
-                    # If we hit a newline, flush the buffer
-                    if char == "\n":
-                        output_queue.put((stream_type, buffer.getvalue()))
-                        buffer = io.StringIO()
-            finally:
-                buffer.close()
-                output_queue.put((stream_type, None))  # Signal EOF
+        original_cwd = os.getcwd()
 
         print(f"Running command: {' '.join(cmd)}")
-        print(f"Current working directory: {os.getcwd()}")
+        print(f"Original working directory: {original_cwd}")
 
-        if cwd:
-            print(f"Changing to directory: {cwd}")
-            os.chdir(cwd)
+        process = None
+        try:
+            if cwd:
+                print(f"Changing to directory: {cwd}")
+                os.chdir(cwd)
+            else:
+                print(f"Running in current directory: {original_cwd}")
 
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            universal_newlines=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                universal_newlines=True,
+                encoding="utf-8",
+                errors="replace",
+            )
 
-        if not process.stdout or not process.stderr:
-            raise RuntimeError("Failed to open subprocess pipes")
+            if not process.stdout or not process.stderr:
+                raise RuntimeError("Failed to open subprocess pipes")
 
-        # Create a single queue for all output
-        output_queue: queue.Queue[tuple[str, str | None]] = queue.Queue()
+            # Create a single queue for all output
+            output_queue: queue.Queue[tuple[str, str | None]] = queue.Queue()
 
-        # Start threads to read from pipes
-        stdout_thread = threading.Thread(
-            target=stream_output, args=(process.stdout, output_queue)
-        )
-        stderr_thread = threading.Thread(
-            target=stream_output, args=(process.stderr, output_queue)
-        )
+            # Start threads to read from pipes
+            stdout_thread = threading.Thread(
+                target=self._stream_output,
+                args=(process.stdout, output_queue, process.stdout),
+            )
+            stderr_thread = threading.Thread(
+                target=self._stream_output,
+                args=(process.stderr, output_queue, process.stdout),
+            )
 
-        stdout_thread.daemon = True
-        stderr_thread.daemon = True
-        stdout_thread.start()
-        stderr_thread.start()
+            stdout_thread.daemon = True
+            stderr_thread.daemon = True
+            stdout_thread.start()
+            stderr_thread.start()
 
-        # Track which streams are still active
-        active_streams = {"stdout", "stderr"}
+            # Track which streams are still active
+            active_streams = {"stdout", "stderr"}
 
-        # Read from queue and print output
-        while active_streams:
-            try:
-                stream_type, content = output_queue.get(timeout=0.1)
-                if content is None:
-                    active_streams.remove(stream_type)
-                else:
-                    print(content, end="", flush=True)
-            except queue.Empty:
-                continue
+            # Read from queue and print output
+            while active_streams:
+                try:
+                    stream_type, content = output_queue.get(timeout=0.1)
+                    if content is None:
+                        active_streams.remove(stream_type)
+                    else:
+                        print(content, end="", flush=True)
+                except queue.Empty:
+                    continue
 
-        stdout_thread.join()
-        stderr_thread.join()
-        process.wait()
+            stdout_thread.join()
+            stderr_thread.join()
+            process.wait()
 
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, cmd)
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, cmd)
+        finally:
+            # Ensure we change back to the original directory
+            if os.getcwd() != original_cwd:
+                print(f"Changing back to original directory: {original_cwd}")
+                os.chdir(original_cwd)
+            else:
+                print(f"Remained in original directory: {original_cwd}")
 
     def asset_materialisation(
         self,
