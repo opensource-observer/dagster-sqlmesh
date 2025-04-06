@@ -16,7 +16,7 @@ from dagster_sqlmesh import SQLMeshContextConfig, SQLMeshResource, sqlmesh_asset
 
 CURR_DIR = os.path.dirname(__file__)
 SQLMESH_PROJECT_PATH = os.path.abspath(os.path.join(CURR_DIR, "../sqlmesh_project"))
-DUCKDB_PATH = os.path.join(CURR_DIR, "../../db.db")
+DUCKDB_PATH = os.path.join(SQLMESH_PROJECT_PATH, "db.db")
 
 sqlmesh_config = SQLMeshContextConfig(path=SQLMESH_PROJECT_PATH, gateway="local")
 

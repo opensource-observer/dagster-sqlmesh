@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from dagster_sqlmesh.conftest import DagsterTestContext, SQLMeshTestContext
+from dagster_sqlmesh.controller.base import PlanOptions
 
 logger = logging.getLogger(__name__)
 
@@ -192,11 +193,63 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
 
     # sample_dagster_test_context.init_test_source()
 
-    sample_dagster_test_context.asset_materialisation(assets=["seed_model_1"])
+    sample_dagster_test_context.asset_materialisation(
+        assets=[
+            "test_source",
+            "seed_model_1",
+            "seed_model_2",
+            "staging_model_1",
+            "staging_model_2",
+            "intermediate_model_1",
+            "full_model",
+        ],
+        plan_options=PlanOptions(
+            enable_preview=True,
+        ),
+    )
 
-    # sample_dagster_test_context.asset_materialisation(assets=["test_source", "seed_model_1", "seed_model_2", "staging_model_1", "staging_model_2", "intermediate_model_1", "full_model"])
+    # # # Modify intermediate_model_1 sql to cause breaking change
+    # sample_sqlmesh_test_context.modify_model_file(
+    #     "intermediate_model_1.sql",
+    #     """
+    #     MODEL (
+    #     name sqlmesh_example.intermediate_model_1,
+    #     kind INCREMENTAL_BY_TIME_RANGE (
+    #         time_column event_date
+    #     ),
+    #     start '2020-01-01',
+    #     cron '@daily',
+    #     grain (id, event_date)
+    #     );
 
-    # sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"])
+    #     SELECT
+    #     main.id,
+    #     main.item_id,
+    #     main.event_date,
+    #     CONCAT('item - ', main.item_id) as item_name
+    #     FROM sqlmesh_example.staging_model_1 AS main
+    #     INNER JOIN sqlmesh_example.staging_model_2 as sub
+    #     ON main.id = sub.id
+    #     WHERE
+    #     event_date BETWEEN @start_date AND @end_date
+    #     """,
+    # )
+
+    # sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"], plan_options=PlanOptions(skip_backfill=True, enable_preview=True, skip_tests=True))
+
+    intermediate_model_1_df = (
+        sample_sqlmesh_test_context.query(
+            """
+        SELECT *
+        FROM sqlmesh_example.intermediate_model_1
+        """,
+            return_df=True,
+        )
+        .sort_values(by="item_id")
+        .reset_index(drop=True)
+    )
+
+    print(f"intermediate_model_1_df:\n{intermediate_model_1_df}")
 
 
 if __name__ == "__main__":

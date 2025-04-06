@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import logging
 import os
@@ -6,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import duckdb
 import polars
@@ -41,7 +42,31 @@ def sample_project_root() -> t.Iterator[str]:
     """Creates a temporary project directory containing both SQLMesh and Dagster projects"""
     with tempfile.TemporaryDirectory() as tmp_dir:
         project_dir = shutil.copytree("sample", tmp_dir, dirs_exist_ok=True)
+
         yield project_dir
+
+        # Create debug directory with timestamp AFTER test run
+        debug_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "debug_runs"
+        )
+        os.makedirs(debug_dir, exist_ok=True)
+        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_debug_dir = os.path.join(debug_dir, f"run_{timestamp}")
+
+        # Copy contents to debug directory
+        try:
+            shutil.copytree(tmp_dir, run_debug_dir, dirs_exist_ok=True)
+            logger.info(
+                f"Copied final test project contents to {run_debug_dir} for debugging"
+            )
+        except FileNotFoundError:
+            logger.warning(
+                f"Temporary directory {tmp_dir} not found during cleanup copy."
+            )
+        except Exception as e:
+            logger.error(
+                f"Error copying temporary directory {tmp_dir} to {run_debug_dir}: {e}"
+            )
 
 
 @pytest.fixture
@@ -74,6 +99,9 @@ class SQLMeshTestContext:
     db_path: str
     context_config: SQLMeshContextConfig
     project_path: str
+
+    # Internal state for backup/restore
+    _backed_up_files: set[str] = field(default_factory=set, init=False)
 
     def create_controller(
         self, enable_debug_console: bool = False
@@ -159,6 +187,39 @@ class SQLMeshTestContext:
             for model_name in self._backed_up_files:
                 self.restore_model_file(model_name)
             self._backed_up_files.clear()
+
+    def save_sqlmesh_debug_state(self, name_suffix: str = "manual_save") -> str:
+        """Saves the current state of the SQLMesh project to the debug directory.
+
+        Copies the contents of the SQLMesh project directory (self.project_path)
+        to a timestamped sub-directory within the 'debug_runs' folder.
+
+        Args:
+            name_suffix: An optional suffix to append to the debug directory name
+                         to distinguish this save point (e.g., 'before_change',
+                         'after_plan'). Defaults to 'manual_save'.
+
+        Returns:
+            The path to the created debug state directory.
+        """
+        debug_dir_base = os.path.join(
+            os.path.dirname(self.project_path), "..", "debug_runs"
+        )
+        os.makedirs(debug_dir_base, exist_ok=True)
+        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_debug_dir = os.path.join(
+            debug_dir_base, f"sqlmesh_state_{timestamp}_{name_suffix}"
+        )
+
+        try:
+            shutil.copytree(self.project_path, run_debug_dir, dirs_exist_ok=True)
+            logger.info(f"Saved SQLMesh project debug state to {run_debug_dir}")
+            return run_debug_dir
+        except Exception as e:
+            logger.error(
+                f"Error saving SQLMesh project debug state to {run_debug_dir}: {e}"
+            )
+            raise
 
     def query(self, *args: t.Any, return_df: bool = False, **kwargs: t.Any) -> t.Any:
         """Execute a query against the test database.
@@ -477,7 +538,8 @@ def model_change_test_context(
 class DagsterTestContext:
     """A test context for running Dagster"""
 
-    project_path: str
+    dagster_project_path: str
+    sqlmesh_project_path: str
 
     def _run_command(self, cmd: list[str]) -> None:
         """Execute a command and stream its output in real-time.
@@ -488,45 +550,73 @@ class DagsterTestContext:
         Raises:
             subprocess.CalledProcessError: If the command returns non-zero exit code
         """
+        import io
         import queue
         import threading
         import typing as t
 
         def stream_output(
-            pipe: t.IO[str], output_queue: queue.Queue[str | None]
+            pipe: t.IO[str], output_queue: queue.Queue[tuple[str, str | None]]
         ) -> None:
-            """Stream output from a pipe to a queue."""
+            """Stream output from a pipe to a queue.
+
+            Args:
+                pipe: The pipe to read from (stdout or stderr)
+                output_queue: Queue to write output to, as (stream_type, line) tuples
+            """
+            # Use a StringIO buffer to accumulate characters into lines
+            buffer = io.StringIO()
+            stream_type = "stdout" if pipe is process.stdout else "stderr"
+
             try:
                 while True:
                     char = pipe.read(1)
                     if not char:
+                        # Flush any remaining content in buffer
+                        remaining = buffer.getvalue()
+                        if remaining:
+                            output_queue.put((stream_type, remaining))
                         break
-                    output_queue.put(char)
+
+                    buffer.write(char)
+
+                    # If we hit a newline, flush the buffer
+                    if char == "\n":
+                        output_queue.put((stream_type, buffer.getvalue()))
+                        buffer = io.StringIO()
             finally:
-                output_queue.put(None)  # Signal EOF
+                buffer.close()
+                output_queue.put((stream_type, None))  # Signal EOF
 
         print(f"Running command: {' '.join(cmd)}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Changing to directory: {self.dagster_project_path}")
+
+        # Change to the dagster project directory before running the command
+        os.chdir(self.dagster_project_path)
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             universal_newlines=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
         if not process.stdout or not process.stderr:
             raise RuntimeError("Failed to open subprocess pipes")
 
-        # Create queues for stdout and stderr
-        stdout_queue: queue.Queue[str | None] = queue.Queue()
-        stderr_queue: queue.Queue[str | None] = queue.Queue()
+        # Create a single queue for all output
+        output_queue: queue.Queue[tuple[str, str | None]] = queue.Queue()
 
         # Start threads to read from pipes
         stdout_thread = threading.Thread(
-            target=stream_output, args=(process.stdout, stdout_queue)
+            target=stream_output, args=(process.stdout, output_queue)
         )
         stderr_thread = threading.Thread(
-            target=stream_output, args=(process.stderr, stderr_queue)
+            target=stream_output, args=(process.stderr, output_queue)
         )
 
         stdout_thread.daemon = True
@@ -534,30 +624,19 @@ class DagsterTestContext:
         stdout_thread.start()
         stderr_thread.start()
 
-        # Read from queues and print output
-        stdout_done = False
-        stderr_done = False
+        # Track which streams are still active
+        active_streams = {"stdout", "stderr"}
 
-        while not (stdout_done and stderr_done):
-            # Handle stdout
+        # Read from queue and print output
+        while active_streams:
             try:
-                char = stdout_queue.get_nowait()
-                if char is None:
-                    stdout_done = True
+                stream_type, content = output_queue.get(timeout=0.1)
+                if content is None:
+                    active_streams.remove(stream_type)
                 else:
-                    print(char, end="", flush=True)
+                    print(content, end="", flush=True)
             except queue.Empty:
-                pass
-
-            # Handle stderr
-            try:
-                char = stderr_queue.get_nowait()
-                if char is None:
-                    stderr_done = True
-                else:
-                    print(char, end="", flush=True)
-            except queue.Empty:
-                pass
+                continue
 
         stdout_thread.join()
         stderr_thread.join()
@@ -583,7 +662,10 @@ class DagsterTestContext:
             "resources": {
                 "sqlmesh": {
                     "config": {
-                        "config": {"gateway": "local", "path": self.project_path}
+                        "config": {
+                            "gateway": "local",
+                            "path": self.sqlmesh_project_path,
+                        }
                     }
                 }
             }
@@ -610,7 +692,7 @@ class DagsterTestContext:
             "asset",
             "materialize",
             "-f",
-            os.path.join(self.project_path, "definitions.py"),
+            os.path.join(self.dagster_project_path, "definitions.py"),
             "--select",
             ",".join(assets),
             "--config-json",
@@ -633,7 +715,10 @@ def sample_dagster_test_context(
     sample_dagster_project: str,
 ) -> t.Iterator[DagsterTestContext]:
     test_context = DagsterTestContext(
-        project_path=os.path.join(sample_dagster_project),
+        dagster_project_path=os.path.join(sample_dagster_project),
+        sqlmesh_project_path=os.path.join(
+            sample_dagster_project.replace("dagster_project", "sqlmesh_project")
+        ),
     )
     yield test_context
 
