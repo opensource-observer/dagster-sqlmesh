@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from dagster_sqlmesh.conftest import DagsterTestContext, SQLMeshTestContext
-from dagster_sqlmesh.controller.base import PlanOptions
+from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
     #     "Expected last_updated_at timestamps to remain unchanged when no model changes were made"
     # )
 
-    # sample_dagster_test_context.init_test_source()
+    sample_dagster_test_context.init_test_source()
 
     sample_dagster_test_context.asset_materialisation(
         assets=[
@@ -206,6 +206,18 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
             enable_preview=True,
         ),
     )
+
+    intermediate_model_1_df = (
+        sample_sqlmesh_test_context.query(
+            """
+        SELECT *
+        FROM sqlmesh_example__dev.intermediate_model_1
+        """,
+            return_df=True,
+        )
+    )
+
+    print(f"Pre-change intermediate_model_1: {intermediate_model_1_df.head(10)}")
 
     # # # Modify intermediate_model_1 sql to cause breaking change
     sample_sqlmesh_test_context.modify_model_file(
@@ -234,7 +246,19 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         """,
     )
 
-    sample_dagster_test_context.asset_materialisation(assets=["intermediate_model_1"], plan_options=PlanOptions(skip_backfill=True, enable_preview=True, skip_tests=True))
+    sample_dagster_test_context.asset_materialisation(
+        assets=["intermediate_model_1"],
+        plan_options=PlanOptions(
+            skip_backfill=False,
+            skip_tests=True,
+            start="2024-01-01",
+            end="2024-12-31",
+        ),
+        run_options=RunOptions(
+            start="2024-01-01",
+            end="2024-12-31",
+        ),
+    )
 
     intermediate_model_1_df = (
         sample_sqlmesh_test_context.query(
@@ -244,11 +268,9 @@ def test_given_model_chain_when_running_with_different_flags_then_behaves_as_exp
         """,
             return_df=True,
         )
-        .sort_values(by="item_id")
-        .reset_index(drop=True)
     )
 
-    print(f"intermediate_model_1_df:\n{intermediate_model_1_df}")
+    print(f"Post-change intermediate_model_1: {intermediate_model_1_df.head(10)}")
 
 
 if __name__ == "__main__":
