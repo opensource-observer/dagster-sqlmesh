@@ -1,10 +1,14 @@
 import logging
 import typing as t
 
-from dagster import AssetExecutionContext, ConfigurableResource, MaterializeResult
+from dagster import (
+    AssetExecutionContext,
+    ConfigurableResource,
+    MaterializeResult,
+)
 from sqlmesh import Model
 from sqlmesh.core.context import Context as SQLMeshContext
-from sqlmesh.core.snapshot import Snapshot
+from sqlmesh.core.snapshot import Snapshot, SnapshotInfoLike, SnapshotTableInfo
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 
@@ -27,28 +31,36 @@ class MaterializationTracker:
         self._complete_update_status: dict[str, bool] = {}
         self._sorted_dag = sorted_dag
         self._current_index = 0
+        self.finished_promotion = False
+
+    def init_complete_update_status(self, snapshots: list[SnapshotTableInfo]) -> None:
+        planned_model_names = set()
+        for snapshot in snapshots:
+            planned_model_names.add(snapshot.name)
+
+        # Anything not in the plan should be listed as completed and queued for
+        # notification
+        self._complete_update_status = {
+            name: False for name in (set(self._sorted_dag) - planned_model_names)
+        }
+
+    def update_promotion(self, snapshot: SnapshotInfoLike, promoted: bool) -> None:
+        self._complete_update_status[snapshot.name] = promoted
+
+    def stop_promotion(self) -> None:
+        self.finished_promotion = True
 
     def plan(self, batches: dict[Snapshot, int]) -> None:
         self._batches = batches
         self._count: dict[Snapshot, int] = {}
 
-        incomplete_names = set()
-        for snapshot, count in self._batches.items():
-            incomplete_names.add(snapshot.name)
+        for snapshot, _ in self._batches.items():
             self._count[snapshot] = 0
 
-        # Anything not in the plan should be listed as completed and queued for
-        # notification
-        self._complete_update_status = {
-            name: False for name in (set(self._sorted_dag) - incomplete_names)
-        }
-
-    def update(self, snapshot: Snapshot, _batch_idx: int) -> tuple[int, int]:
+    def update_plan(self, snapshot: Snapshot, _batch_idx: int) -> tuple[int, int]:
         self._count[snapshot] += 1
         current_count = self._count[snapshot]
         expected_count = self._batches[snapshot]
-        if self._batches[snapshot] == self._count[snapshot]:
-            self._complete_update_status[snapshot.name] = True
         return (current_count, expected_count)
 
     def notify_queue_next(self) -> tuple[str, bool] | None:
@@ -110,11 +122,12 @@ class DagsterSQLMeshEventHandler:
         self._tracker = MaterializationTracker(dag.sorted[:], self._logger)
         self._stage = "plan"
 
-    def process_events(
-        self, sqlmesh_context: SQLMeshContext, event: console.ConsoleEvent
-    ) -> t.Iterator[MaterializeResult]:
+    def process_events(self, event: console.ConsoleEvent) -> None:
         self.report_event(event)
 
+    def notify_success(
+        self, sqlmesh_context: SQLMeshContext
+    ) -> t.Iterator[MaterializeResult]:
         notify = self._tracker.notify_queue_next()
         while notify is not None:
             completed_name, update_status = notify
@@ -146,6 +159,7 @@ class DagsterSQLMeshEventHandler:
 
         match event:
             case console.StartPlanEvaluation(plan):
+                self._tracker.init_complete_update_status(plan.environment.snapshots)
                 log_context.info(
                     "Starting Plan Evaluation",
                     {
@@ -173,7 +187,7 @@ class DagsterSQLMeshEventHandler:
             case console.UpdateSnapshotEvaluationProgress(
                 snapshot, batch_idx, duration_ms
             ):
-                done, expected = self._tracker.update(snapshot, batch_idx)
+                done, expected = self._tracker.update_plan(snapshot, batch_idx)
 
                 log_context.info(
                     "Snapshot progress update",
@@ -200,6 +214,21 @@ class DagsterSQLMeshEventHandler:
                         [f"{model!s}\n{model.__cause__!s}" for model in models]
                     )
                     log_context.error(f"sqlmesh failed models: {failed_models}")
+            case console.UpdatePromotionProgress(snapshot, promoted):
+                log_context.info(
+                    "Promotion progress update",
+                    {
+                        "snapshot": snapshot.name,
+                        "promoted": promoted,
+                    },
+                )
+                self._tracker.update_promotion(snapshot, promoted)
+            case console.StopPromotionProgress(success):
+                self._tracker.stop_promotion()
+                if success:
+                    log_context.info("Promotion completed successfully")
+                else:
+                    log_context.error("Promotion failed")
             case _:
                 log_context.debug("Received event")
 
@@ -292,7 +321,9 @@ class SQLMeshResource(ConfigurableResource):
                 plan_options=plan_options,
                 run_options=run_options,
             ):
-                yield from event_handler.process_events(mesh.context, event)
+                event_handler.process_events(event)
+
+            yield from event_handler.notify_success(mesh.context)
 
     def get_controller(
         self, log_override: logging.Logger | None = None
