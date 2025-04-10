@@ -237,6 +237,7 @@ class SQLMeshResource(ConfigurableResource):
         start: TimeLike | None = None,
         end: TimeLike | None = None,
         restate_selected: bool = False,
+        skip_run: bool = False,
         plan_options: PlanOptions | None = None,
         run_options: RunOptions | None = None,
     ) -> t.Iterable[MaterializeResult]:
@@ -287,6 +288,7 @@ class SQLMeshResource(ConfigurableResource):
                 end=end,
                 select_models=select_models,
                 restate_selected=restate_selected,
+                skip_run=skip_run,
                 plan_options=plan_options,
                 run_options=run_options,
             ):
