@@ -16,7 +16,7 @@ from dagster_sqlmesh import SQLMeshContextConfig, SQLMeshResource, sqlmesh_asset
 
 CURR_DIR = os.path.dirname(__file__)
 SQLMESH_PROJECT_PATH = os.path.abspath(os.path.join(CURR_DIR, "../sqlmesh_project"))
-DUCKDB_PATH = os.path.join(CURR_DIR, "../../db.db")
+DUCKDB_PATH = os.path.join(SQLMESH_PROJECT_PATH, "db.db")
 
 sqlmesh_config = SQLMeshContextConfig(path=SQLMESH_PROJECT_PATH, gateway="local")
 
@@ -53,7 +53,9 @@ def test_source() -> pl.DataFrame:
 
 
 @sqlmesh_assets(environment="dev", config=sqlmesh_config, enabled_subsetting=True)
-def sqlmesh_project(context: AssetExecutionContext, sqlmesh: SQLMeshResource) -> t.Iterator[MaterializeResult]:
+def sqlmesh_project(
+    context: AssetExecutionContext, sqlmesh: SQLMeshResource
+) -> t.Iterator[MaterializeResult]:
     yield from sqlmesh.run(context)
 
 

@@ -1,6 +1,6 @@
-MODEL (
-  name sqlmesh_example.full_model,
-  kind FULL,
+model (
+  NAME sqlmesh_example.full_model,
+  kind full,
   cron '@daily',
   grain item_id,
   audits (assert_positive_order_ids),
@@ -9,10 +9,14 @@ MODEL (
     "full",
   )
 );
-
 SELECT
   item_id,
-  COUNT(DISTINCT id) AS num_orders,
+  item_name,
+  COUNT(
+    DISTINCT id
+  ) AS num_orders,
+  now() AS last_updated_at
 FROM
   sqlmesh_example.intermediate_model_1
-GROUP BY item_id
+GROUP BY
+  ALL
