@@ -332,8 +332,8 @@ class SQLMeshInstance:
             self.logger.debug("starting sqlmesh plan")
             self.logger.debug(f"selected models: {select_models}")
             yield from self.plan(categorizer, default_catalog, **plan_options)
-            self.logger.debug("starting sqlmesh run")
             if not skip_run:
+                self.logger.debug("starting sqlmesh run")
                 yield from self.run(**run_options)
         except Exception as e:
             self.logger.error(f"Error during sqlmesh plan and run: {e}")
