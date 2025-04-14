@@ -296,8 +296,6 @@ class SQLMeshResource(ConfigurableResource):
                         sqlmesh_model_name_to_key(model.name)
                         in context.selected_output_names
                     ):
-                        logger.info(f"selected model: {model.name}")
-
                         models_map[key] = model
                         select_models.append(model.name)
             selected_models_set = set(models_map.keys())
@@ -308,6 +306,8 @@ class SQLMeshResource(ConfigurableResource):
                 # Setting this to none to allow sqlmesh to select all models and
                 # also remove any models
                 select_models = None
+            else:
+                logger.info(f"selected models: {select_models}")
 
             event_handler = DagsterSQLMeshEventHandler(
                 context, models_map, dag, "sqlmesh: "
