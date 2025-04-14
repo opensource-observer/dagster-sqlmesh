@@ -214,6 +214,7 @@ class DagsterSQLMeshEventHandler:
                         [f"{model!s}\n{model.__cause__!s}" for model in models]
                     )
                     log_context.error(f"sqlmesh failed models: {failed_models}")
+                    raise Exception("sqlmesh has failed models")
             case console.UpdatePromotionProgress(snapshot, promoted):
                 log_context.info(
                     "Promotion progress update",
