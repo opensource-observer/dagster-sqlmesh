@@ -1,8 +1,10 @@
 import logging
 
 import polars
+import pytest
 
-from .testing import SQLMeshTestContext
+from dagster_sqlmesh.conftest import SQLMeshTestContext
+from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ def test_basic_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     SELECT COUNT(*) as items FROM sqlmesh_example__dev.staging_model_1
     """
     )
-    assert staging_model_count[0][0] == 7
+    assert staging_model_count[0][0] == 8
 
 
 def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
@@ -26,7 +28,12 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
         environment="dev",
         start="2023-01-01",
         end="2024-01-01",
-        execution_time="2024-01-02",
+        plan_options=PlanOptions(
+            execution_time="2024-01-02",
+        ),
+        run_options=RunOptions(
+            execution_time="2024-01-02",
+        ),
     )
 
     staging_model_count = sample_sqlmesh_test_context.query(
@@ -41,7 +48,12 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
         environment="dev",
         start="2024-01-01",
         end="2024-07-07",
-        execution_time="2024-07-08",
+        plan_options=PlanOptions(
+            execution_time="2024-07-08",
+        ),
+        run_options=RunOptions(
+            execution_time="2024-07-08",
+        ),
     )
 
     staging_model_count = sample_sqlmesh_test_context.query(
@@ -49,7 +61,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1
     """
     )
-    assert staging_model_count[0][0] == 7
+    assert staging_model_count[0][0] == 8
 
     test_source_model_count = sample_sqlmesh_test_context.query(
         """
@@ -70,7 +82,12 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
         end="2024-07-10",
-        execution_time="2024-07-10",
+        plan_options=PlanOptions(
+            execution_time="2024-07-10",
+        ),
+        run_options=RunOptions(
+            execution_time="2024-07-10",
+        ),
         # restate_models=["sqlmesh_example.staging_model_3"],
     )
 
@@ -79,7 +96,7 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     SELECT COUNT(*) FROM sqlmesh_example__dev.staging_model_1
     """
     )
-    assert staging_model_count[0][0] == 7
+    assert staging_model_count[0][0] == 8
 
     test_source_model_count = sample_sqlmesh_test_context.query(
         """
@@ -92,7 +109,12 @@ def test_sqlmesh_context(sample_sqlmesh_test_context: SQLMeshTestContext):
     sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
         end="2024-07-10",
-        execution_time="2024-07-10",
+        plan_options=PlanOptions(
+            execution_time="2024-07-10",
+        ),
+        run_options=RunOptions(
+            execution_time="2024-07-10",
+        ),
     )
 
     logger.debug("SQLMESH MATERIALIZATION 5")
@@ -130,7 +152,12 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
         environment="dev",
         start="2023-01-01",
         end="2024-01-01",
-        execution_time="2024-01-02",
+        plan_options=PlanOptions(
+            execution_time="2024-01-02",
+        ),
+        run_options=RunOptions(
+            execution_time="2024-01-02",
+        ),
     )
 
     count_query = sample_sqlmesh_test_context.query(
@@ -161,7 +188,12 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
         environment="dev",
         start="2023-03-01",
         end="2023-03-31",
-        execution_time="2024-01-02",
+        plan_options=PlanOptions(
+            execution_time="2024-01-02",
+        ),
+        run_options=RunOptions(
+            execution_time="2024-01-02",
+        ),
         select_models=["sqlmesh_example.staging_model_4"],
         restate_selected=True,
         skip_run=True,
@@ -184,12 +216,16 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
     """
     )
 
-    assert (
-        feb_sum_query_restate[0][0] == feb_sum_query[0][0]
-    ), "February sum should not change"
-    assert (
-        march_sum_query_restate[0][0] != march_sum_query[0][0]
-    ), "March sum should change"
-    assert (
-        intermediate_2_query_restate[0][0] == intermediate_2_query[0][0]
-    ), "Intermediate model should not change during restate"
+    assert feb_sum_query_restate[0][0] == feb_sum_query[0][0], (
+        "February sum should not change"
+    )
+    assert march_sum_query_restate[0][0] != march_sum_query[0][0], (
+        "March sum should change"
+    )
+    assert intermediate_2_query_restate[0][0] == intermediate_2_query[0][0], (
+        "Intermediate model should not change during restate"
+    )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

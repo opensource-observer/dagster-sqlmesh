@@ -1,5 +1,6 @@
 test_example_full_model:
   model: sqlmesh_example.full_model
+  exclude_columns: [last_updated_at]
   inputs:
     sqlmesh_example.intermediate_model_1:
       rows:
@@ -11,6 +12,7 @@ test_example_full_model:
         item_id: 2
   outputs:
     query:
+      partial: true
       rows:
       - item_id: 1
         num_orders: 2

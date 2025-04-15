@@ -25,6 +25,7 @@ dev = [
     "dagster-duckdb-polars>=0.24.2",
     "fastapi", # this is for sqlmesh ui
     "sse-starlette",
+    "pandas-stubs"
 ]
 
 [build-system]

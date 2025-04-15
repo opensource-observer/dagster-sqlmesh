@@ -52,7 +52,7 @@ class MaterializationTracker:
 
     def plan(self, batches: dict[Snapshot, int]) -> None:
         self._batches = batches
-        self._count: dict[Snapshot, int] = {}
+        self._count = {}
 
         for snapshot, _ in self._batches.items():
             self._count[snapshot] = 0
@@ -258,7 +258,9 @@ class DagsterSQLMeshEventHandler:
 
 class SQLMeshResource(ConfigurableResource):
     config: SQLMeshContextConfig
-
+    plan_options_override: dict | None = None
+    run_options_override: dict | None = None
+    
     def run(
         self,
         context: AssetExecutionContext,
@@ -275,6 +277,20 @@ class SQLMeshResource(ConfigurableResource):
         plan_options = plan_options or {}
         run_options = run_options or {}
 
+        if self.plan_options_override:
+            assert isinstance(self.plan_options_override, dict)
+            plan_options = PlanOptions(**self.plan_options_override)
+
+            if plan_options.get("select_models"):
+                raise ValueError("select_models is not allowed in plan_options")
+        
+        if self.run_options_override:
+            assert isinstance(self.run_options_override, dict)
+            run_options = RunOptions(**self.run_options_override)
+
+            if run_options.get("select_models"):
+                raise ValueError("select_models is not allowed in run_options")
+
         logger = context.log
 
         controller = self.get_controller(logger)
@@ -282,7 +298,7 @@ class SQLMeshResource(ConfigurableResource):
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
 
-            select_models = []
+            select_models: list[str] | None = None
 
             models = mesh.models()
             models_map = models.copy()
@@ -297,7 +313,12 @@ class SQLMeshResource(ConfigurableResource):
                         in context.selected_output_names
                     ):
                         models_map[key] = model
+
+                        if select_models is None:
+                            select_models = []
+                        
                         select_models.append(model.name)
+
             selected_models_set = set(models_map.keys())
 
             if all_available_models == selected_models_set:
