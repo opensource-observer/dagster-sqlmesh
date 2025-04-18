@@ -340,7 +340,6 @@ class IntrospectingConsole(Console):
         def {method_name}({", ".join(func_signature)}):
             self.publish_known_event('{event_name}', {", ".join(call_params)})
         """)
-        print(event_handler_str)
         exec(event_handler_str)
         return t.cast(t.Callable[[t.Any], t.Any], locals()[method_name])
 
@@ -358,7 +357,6 @@ class IntrospectingConsole(Console):
                 if not isinstance(param_type_name, str):
                     param_type_name = param_type_name.__name__
                 func_signature.append(f"{param_name}: '{param_type_name}'")
-                print(func_signature)
             else:
                 default_value = param.default
                 param_type_name = param.annotation
@@ -367,7 +365,6 @@ class IntrospectingConsole(Console):
                 if isinstance(param.default, str):
                     default_value = f"'{param.default}'"
                 func_signature.append(f"{param_name}: '{param_type_name}' = {default_value}")
-                print(func_signature)
             call_params.append(f"{param_name}={param_name}")
         return (func_signature, call_params)
 
@@ -379,7 +376,6 @@ class IntrospectingConsole(Console):
         def {method_name}({", ".join(func_signature)}):
             self.publish_unknown_event('{method_name}', {", ".join(call_params)})
         """)
-        print(event_handler_str)
         exec(event_handler_str)
         return t.cast(t.Callable[[t.Any], t.Any], locals()[method_name])
 
