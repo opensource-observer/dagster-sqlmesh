@@ -448,7 +448,9 @@ class EventConsole(IntrospectingConsole):
     events: t.ClassVar[list[type[ConsoleEvent]]] = [
         Plan,
         StartPlanEvaluation,
+        StopPlanEvaluation,
         StartEvaluationProgress,
+        StopEvaluationProgress,
         UpdatePromotionProgress,
         StopPromotionProgress,
         StartSnapshotEvaluationProgress,
