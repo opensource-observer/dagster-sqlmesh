@@ -158,7 +158,7 @@ class DagsterSQLMeshEventHandler:
         log_context = self.log_context(event)
 
         match event:
-            case console.StartPlanEvaluation(plan):
+            case console.StartPlanEvaluation(plan=plan):
                 self._tracker.init_complete_update_status(plan.environment.snapshots)
                 log_context.info(
                     "Starting Plan Evaluation",
@@ -169,7 +169,7 @@ class DagsterSQLMeshEventHandler:
             case console.StopPlanEvaluation:
                 log_context.info("Plan evaluation completed")
             case console.StartEvaluationProgress(
-                batches, environment_naming_info, default_catalog
+                batched_intervals=batches, environment_naming_info=environment_naming_info, default_catalog=default_catalog
             ):
                 self.update_stage("run")
                 log_context.info(
@@ -185,7 +185,7 @@ class DagsterSQLMeshEventHandler:
                 )
                 self._tracker.plan(batches)
             case console.UpdateSnapshotEvaluationProgress(
-                snapshot, batch_idx, duration_ms
+                snapshot=snapshot, batch_idx=batch_idx, duration_ms=duration_ms
             ):
                 done, expected = self._tracker.update_plan(snapshot, batch_idx)
 
@@ -197,25 +197,25 @@ class DagsterSQLMeshEventHandler:
                         "duration_ms": duration_ms,
                     },
                 )
-            case console.LogSuccess(success):
+            case console.LogSuccess(success=success):
                 self.update_stage("done")
                 if success:
                     log_context.info("sqlmesh ran successfully")
                 else:
                     log_context.error("sqlmesh failed")
                     raise Exception("sqlmesh failed during run")
-            case console.LogError(message):
+            case console.LogError(message=message):
                 log_context.error(
                     f"sqlmesh reported an error: {message}",
                 )
-            case console.LogFailedModels(models):
+            case console.LogFailedModels(models=models):
                 if len(models) != 0:
                     failed_models = "\n".join(
                         [f"{model!s}\n{model.__cause__!s}" for model in models]
                     )
                     log_context.error(f"sqlmesh failed models: {failed_models}")
                     raise Exception("sqlmesh has failed models")
-            case console.UpdatePromotionProgress(snapshot, promoted):
+            case console.UpdatePromotionProgress(snapshot=snapshot, promoted=promoted):
                 log_context.info(
                     "Promotion progress update",
                     {
@@ -224,7 +224,7 @@ class DagsterSQLMeshEventHandler:
                     },
                 )
                 self._tracker.update_promotion(snapshot, promoted)
-            case console.StopPromotionProgress(success):
+            case console.StopPromotionProgress(success=success):
                 self._tracker.stop_promotion()
                 if success:
                     log_context.info("Promotion completed successfully")

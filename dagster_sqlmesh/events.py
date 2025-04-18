@@ -93,29 +93,29 @@ class ConsoleRecorder:
 
     def __call__(self, event: console.ConsoleEvent) -> None:
         match event:
-            case console.StartPlanEvaluation(evaluatable_plan):
+            case console.StartPlanEvaluation(plan=evaluatable_plan):
                 self.logger.debug("Starting plan evaluation")
                 print(evaluatable_plan.plan_id)
             case console.StartEvaluationProgress(
-                batches, environment_naming_info, default_catalog
+                batched_intervals=batches, environment_naming_info=environment_naming_info, default_catalog=default_catalog
             ):
                 self.logger.debug("STARTING EVALUATION")
                 self.logger.debug(batches)
                 self.logger.debug(environment_naming_info)
                 self.logger.debug(default_catalog)
-            case console.UpdatePromotionProgress(snapshot, promoted):
+            case console.UpdatePromotionProgress(snapshot=snapshot, promoted=promoted):
                 self.logger.debug("UPDATE PROMOTION PROGRESS")
                 self.logger.debug(snapshot)
                 self.logger.debug(promoted)
-            case console.StopPromotionProgress(success):
+            case console.StopPromotionProgress(success=success):
                 self.logger.debug("STOP PROMOTION")
                 self.logger.debug(success)
                 self._successful = True
-            case console.StartSnapshotEvaluationProgress(snapshot):
+            case console.StartSnapshotEvaluationProgress(snapshot=snapshot):
                 self.logger.debug("START SNAPSHOT EVALUATION")
                 self.logger.debug(snapshot.name)
             case console.UpdateSnapshotEvaluationProgress(
-                snapshot, batch_idx, duration_ms
+                snapshot=snapshot, batch_idx=batch_idx, duration_ms=duration_ms
             ):
                 self._updated.append(snapshot)
                 self.logger.debug("UPDATE SNAPSHOT EVALUATION")
@@ -124,7 +124,7 @@ class ConsoleRecorder:
                 self.logger.debug(duration_ms)
             case _:
                 if self._enable_unknown_event_logging:
-                    self.logger.debug("Unhandled event")
+                    self.logger.debug(f"Unhandled event {event.__class__.__name__}")
                     self.logger.debug(event)
 
     def _show_summary_for(
