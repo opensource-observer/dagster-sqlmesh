@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import duckdb
 import polars
-from sqlmesh.core.console import get_console
 from sqlmesh.utils.date import TimeLike
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
@@ -22,12 +21,9 @@ class SQLMeshTestContext:
     db_path: str
     context_config: SQLMeshContextConfig
 
-    def create_controller(self, enable_debug_console: bool = False):
-        console = None
-        if enable_debug_console:
-            console = get_console()
+    def create_controller(self):
         return DagsterSQLMeshController.setup_with_config(
-            self.context_config, debug_console=console
+            self.context_config, 
         )
 
     def query(self, *args: t.Any, **kwargs: t.Any) -> list[t.Any]:
@@ -69,7 +65,6 @@ class SQLMeshTestContext:
         *,
         environment: str,
         execution_time: TimeLike | None = None,
-        enable_debug_console: bool = False,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
         select_models: list[str] | None = None,
@@ -93,7 +88,7 @@ class SQLMeshTestContext:
             TimeLike can be any time-like object that SQLMesh accepts (datetime, str, etc.).
             The function creates a controller and recorder to capture all SQLMesh events during execution.
         """
-        controller = self.create_controller(enable_debug_console=enable_debug_console)
+        controller = self.create_controller()
         recorder = ConsoleRecorder()
         # controller.add_event_handler(ConsoleRecorder())
         plan_options = PlanOptions(

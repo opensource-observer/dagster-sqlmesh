@@ -7,7 +7,7 @@ from types import MappingProxyType
 from typing import TypeVar
 
 from sqlmesh.core.config import CategorizerConfig
-from sqlmesh.core.console import Console, set_console
+from sqlmesh.core.console import set_console
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 from sqlmesh.core.plan import PlanBuilder
@@ -19,8 +19,8 @@ from ..console import (
     ConsoleEvent,
     ConsoleEventHandler,
     ConsoleException,
-    DebugEventConsole,
     EventConsole,
+    Plan,
     SnapshotCategorizer,
 )
 from ..events import ConsoleGenerator
@@ -215,8 +215,12 @@ class SQLMeshInstance:
             self.logger.debug("waiting for events")
             for event in generator.events(thread):
                 match event:
-                    case ConsoleException(e):
+                    case ConsoleException(exception=e):
                         raise e
+                    case Plan(plan_builder=plan_builder, auto_apply=auto_apply):
+                        if auto_apply:
+                            plan_builder.apply()
+                        yield event
                     case _:
                         yield event
 
@@ -275,7 +279,7 @@ class SQLMeshInstance:
 
             for event in generator.events(thread):
                 match event:
-                    case ConsoleException(e):
+                    case ConsoleException(exception=e):
                         raise e
                     case _:
                         yield event
@@ -400,12 +404,10 @@ class SQLMeshController:
         cls,
         path: str,
         gateway: str = "local",
-        debug_console: Console | None = None,
         log_override: logging.Logger | None = None,
     ) -> "SQLMeshController":
         return cls.setup_with_config(
             config=SQLMeshContextConfig(path=path, gateway=gateway),
-            debug_console=debug_console,
             log_override=log_override,
         )
 
@@ -413,12 +415,9 @@ class SQLMeshController:
     def setup_with_config(
         cls: type[T],
         config: SQLMeshContextConfig,
-        debug_console: Console | None = None,
         log_override: logging.Logger | None = None,
     ) -> T:
-        console = EventConsole(log_override=log_override)
-        if debug_console:
-            console = DebugEventConsole(debug_console)
+        console = EventConsole(log_override=log_override) # type: ignore
         controller = cls(
             console=console,
             config=config,

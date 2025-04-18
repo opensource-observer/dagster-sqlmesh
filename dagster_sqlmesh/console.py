@@ -1,16 +1,15 @@
+import inspect
 import logging
+import textwrap
 import typing as t
 import unittest
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlglot.expressions import Alter
 from sqlmesh.core.console import Console
 from sqlmesh.core.context_diff import ContextDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
-from sqlmesh.core.linter.rule import RuleViolation
-from sqlmesh.core.model import Model
 from sqlmesh.core.plan import EvaluatablePlan, PlanBuilder
 from sqlmesh.core.snapshot import Snapshot, SnapshotChangeCategory, SnapshotInfoLike
 from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
@@ -18,247 +17,207 @@ from sqlmesh.utils.concurrency import NodeExecutionFailedError
 
 logger = logging.getLogger(__name__)
 
+@dataclass(kw_only=True)
+class BaseConsoleEvent:
+    unknown_args: dict[str, t.Any] = field(default_factory=dict)
 
-@dataclass
-class StartMigrationProgress:
+@dataclass(kw_only=True)
+class StartMigrationProgress(BaseConsoleEvent):
     total_tasks: int
 
-
-@dataclass
-class UpdateMigrationProgress:
+@dataclass(kw_only=True)
+class UpdateMigrationProgress(BaseConsoleEvent):
     num_tasks: int
 
-
-@dataclass
-class StopMigrationProgress:
+@dataclass(kw_only=True)
+class StopMigrationProgress(BaseConsoleEvent):
     pass
 
+@dataclass(kw_only=True)
+class StartPlanEvaluation(BaseConsoleEvent):
+    plan: EvaluatablePlan
 
-@dataclass
-class StartPlanEvaluation:
-    evaluatable_plan: EvaluatablePlan
-
-
-@dataclass
-class StopPlanEvaluation:
+@dataclass(kw_only=True)
+class StopPlanEvaluation(BaseConsoleEvent):
     pass
 
-
-@dataclass
-class StartEvaluationProgress:
-    batches: dict[Snapshot, int]
+@dataclass(kw_only=True)
+class StartEvaluationProgress(BaseConsoleEvent):
+    batched_intervals: dict[Snapshot, int]
     environment_naming_info: EnvironmentNamingInfo
     default_catalog: str | None
 
-
-@dataclass
-class StartSnapshotEvaluationProgress:
+@dataclass(kw_only=True)
+class StartSnapshotEvaluationProgress(BaseConsoleEvent):
     snapshot: Snapshot
 
-
-@dataclass
-class UpdateSnapshotEvaluationProgress:
+@dataclass(kw_only=True)
+class UpdateSnapshotEvaluationProgress(BaseConsoleEvent):
     snapshot: Snapshot
     batch_idx: int
     duration_ms: int | None
 
-
-@dataclass
-class StopEvaluationProgress:
+@dataclass(kw_only=True)
+class StopEvaluationProgress(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class StartCreationProgress:
-    total_tasks: int
+@dataclass(kw_only=True)
+class StartCreationProgress(BaseConsoleEvent):
+    snapshots: list[Snapshot]
     environment_naming_info: EnvironmentNamingInfo
     default_catalog: str | None
 
-
-@dataclass
-class UpdateCreationProgress:
+@dataclass(kw_only=True)
+class UpdateCreationProgress(BaseConsoleEvent):
     snapshot: SnapshotInfoLike
 
-
-@dataclass
-class StopCreationProgress:
+@dataclass(kw_only=True)
+class StopCreationProgress(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class StartCleanup:
+@dataclass(kw_only=True)
+class StartCleanup(BaseConsoleEvent):
     ignore_ttl: bool
 
-
-@dataclass
-class UpdateCleanupProgress:
+@dataclass(kw_only=True)
+class UpdateCleanupProgress(BaseConsoleEvent):
     object_name: str
 
-
-@dataclass
-class StopCleanup:
+@dataclass(kw_only=True)
+class StopCleanup(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class StartPromotionProgress:
+@dataclass(kw_only=True)
+class StartPromotionProgress(BaseConsoleEvent):
     total_tasks: int
     environment_naming_info: EnvironmentNamingInfo
     default_catalog: str | None
 
-
-@dataclass
-class UpdatePromotionProgress:
+@dataclass(kw_only=True)
+class UpdatePromotionProgress(BaseConsoleEvent):
     snapshot: SnapshotInfoLike
     promoted: bool
 
-
-@dataclass
-class StopPromotionProgress:
+@dataclass(kw_only=True)
+class StopPromotionProgress(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class UpdateSnapshotMigrationProgress:
+@dataclass(kw_only=True)
+class UpdateSnapshotMigrationProgress(BaseConsoleEvent):
     num_tasks: int
 
-
-@dataclass
-class LogMigrationStatus:
+@dataclass(kw_only=True)
+class LogMigrationStatus(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class StartSnapshotMigrationProgress:
+@dataclass(kw_only=True)
+class StartSnapshotMigrationProgress(BaseConsoleEvent):
     total_tasks: int
 
-
-@dataclass
-class StopSnapshotMigrationProgress:
+@dataclass(kw_only=True)
+class StopSnapshotMigrationProgress(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class StartEnvMigrationProgress:
+@dataclass(kw_only=True)
+class StartEnvMigrationProgress(BaseConsoleEvent):
     total_tasks: int
 
-
-@dataclass
-class UpdateEnvMigrationProgress:
+@dataclass(kw_only=True)
+class UpdateEnvMigrationProgress(BaseConsoleEvent):
     num_tasks: int
 
-
-@dataclass
-class StopEnvMigrationProgress:
+@dataclass(kw_only=True)
+class StopEnvMigrationProgress(BaseConsoleEvent):
     success: bool = True
 
-
-@dataclass
-class ShowModelDifferenceSummary:
+@dataclass(kw_only=True)
+class ShowModelDifferenceSummary(BaseConsoleEvent):
     context_diff: ContextDiff
     environment_naming_info: EnvironmentNamingInfo
     default_catalog: str | None
     no_diff: bool = True
 
-
-@dataclass
-class PlanEvent:
+@dataclass(kw_only=True)
+class Plan(BaseConsoleEvent):
     plan_builder: PlanBuilder
     auto_apply: bool
     default_catalog: str | None
     no_diff: bool = False
     no_prompts: bool = False
 
-
-@dataclass
-class LogTestResults:
+@dataclass(kw_only=True)
+class LogTestResults(BaseConsoleEvent):
     result: unittest.result.TestResult
     output: str | None
     target_dialect: str
 
-
-@dataclass
-class ShowSQL:
+@dataclass(kw_only=True)
+class ShowSQL(BaseConsoleEvent):
     sql: str
 
-
-@dataclass
-class LogStatusUpdate:
+@dataclass(kw_only=True)
+class LogStatusUpdate(BaseConsoleEvent):
     message: str
 
-
-@dataclass
-class LogError:
+@dataclass(kw_only=True)
+class LogError(BaseConsoleEvent):
     message: str
 
-
-@dataclass
-class LogWarning:
+@dataclass(kw_only=True)
+class LogWarning(BaseConsoleEvent):
     short_message: str
     long_message: str | None = None
 
-
-@dataclass
-class LogSuccess:
+@dataclass(kw_only=True)
+class LogSuccess(BaseConsoleEvent):
     message: str
 
-
-@dataclass
-class LogFailedModels:
+@dataclass(kw_only=True)
+class LogFailedModels(BaseConsoleEvent):
     errors: list[NodeExecutionFailedError[str]]
 
-
-@dataclass
-class LogSkippedModels:
+@dataclass(kw_only=True)
+class LogSkippedModels(BaseConsoleEvent):
     snapshot_names: set[str]
 
-
-@dataclass
-class LogDestructiveChange:
+@dataclass(kw_only=True)
+class LogDestructiveChange(BaseConsoleEvent):
     snapshot_name: str
     dropped_column_names: list[str]
     alter_expressions: list[Alter]
     dialect: str
     error: bool = True
 
-
-@dataclass
-class LoadingStart:
+@dataclass(kw_only=True)
+class LoadingStart(BaseConsoleEvent):
     message: str | None = None
     id: uuid.UUID = field(default_factory=uuid.uuid4)
 
-
-@dataclass
-class LoadingStop:
+@dataclass(kw_only=True)
+class LoadingStop(BaseConsoleEvent):
     id: uuid.UUID
 
-
-@dataclass
-class ShowSchemaDiff:
+@dataclass(kw_only=True)
+class ShowSchemaDiff(BaseConsoleEvent):
     schema_diff: SchemaDiff
 
-
-@dataclass
-class ShowRowDiff:
+@dataclass(kw_only=True)
+class ShowRowDiff(BaseConsoleEvent):
     row_diff: RowDiff
     show_sample: bool = True
     skip_grain_check: bool = False
 
-
-@dataclass
-class ConsoleException:
+@dataclass(kw_only=True)
+class ConsoleException(BaseConsoleEvent):
     exception: Exception
 
-
-@dataclass
-class PrintEnvironments:
+@dataclass(kw_only=True)
+class PrintEnvironments(BaseConsoleEvent):
     environments_summary: dict[str, int]
 
-
-@dataclass
-class ShowTableDiffSummary:
+@dataclass(kw_only=True)
+class ShowTableDiffSummary(BaseConsoleEvent):
     table_diff: TableDiff
-
 
 ConsoleEvent = (
     StartPlanEvaluation
@@ -273,7 +232,7 @@ ConsoleEvent = (
     | StartCleanup
     | UpdateCleanupProgress
     | StopCleanup
-    | StartPromotionProgress
+    #| StartPromotionProgress
     | UpdatePromotionProgress
     | StopPromotionProgress
     | UpdateSnapshotMigrationProgress
@@ -283,7 +242,7 @@ ConsoleEvent = (
     | UpdateEnvMigrationProgress
     | StopEnvMigrationProgress
     | ShowModelDifferenceSummary
-    | PlanEvent
+    | Plan
     | LogTestResults
     | ShowSQL
     | LogStatusUpdate
@@ -306,14 +265,172 @@ ConsoleEvent = (
     | ShowTableDiffSummary
 )
 
-ConsoleEventHandler = Callable[[ConsoleEvent], None]
+ConsoleEventHandler = t.Callable[[ConsoleEvent], None]
 
 SnapshotCategorizer = t.Callable[
     [Snapshot, PlanBuilder, str | None], SnapshotChangeCategory
 ]
 
+T = t.TypeVar("T")
 
-class EventConsole(Console):
+def get_console_event_by_name(
+    event_name: str,
+) -> type[ConsoleEvent] | None:
+    """Get the console event class by name."""
+    known_events_classes = t.get_args(ConsoleEvent)
+    console_event_map: dict[str, type[ConsoleEvent]] = {
+        event.__name__: event for event in known_events_classes
+    }
+    return console_event_map.get(event_name)
+
+class IntrospectingConsole(Console):
+    """An event console that dynamically implements methods based on the current
+    sqlmesh console object. If a method is specified it's validated against the
+    current sqlmesh version's implementation"""
+
+    events: t.ClassVar[list[type[ConsoleEvent]]]
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+
+        known_events_classes = cls.events
+        known_events: list[str] = []
+        for known_event in known_events_classes:
+            assert inspect.isclass(known_event), "event must be a class"
+            known_events.append(known_event.__name__)
+            
+
+        # Iterate through all the available abstract methods in console
+        for method_name in Console.__abstractmethods__:
+            # Check if the method is not already implemented
+            if hasattr(cls, method_name):
+                if not getattr(getattr(cls, method_name), '__isabstractmethod__', False):
+                    logger.debug(f"Skipping {method_name} as it is abstract")
+                    continue
+            logger.debug(f"Checking {method_name}")
+
+            # if the method doesn't exist we automatically create a method by
+            # inspecting the method's arguments. Anything that matches "known"
+            # events has it's values checked. The dataclass should define the
+            # required fields and everything else should be sent to a catchall
+            # argument in the dataclass for the event
+            
+            # Convert method name from snake_case to camel case
+            camel_case_method_name = "".join(
+                word.capitalize()
+                for i, word in enumerate(method_name.split("_"))
+            )
+
+            if camel_case_method_name in known_events:
+                logger.debug(f"Creating {method_name} for {camel_case_method_name}")
+                signature = inspect.signature(getattr(Console, method_name))
+                handler = cls.create_event_handler(method_name, camel_case_method_name, signature)
+                setattr(cls, method_name, handler)
+            else:
+                logger.debug(f"Creating {method_name} for unknown event")
+                signature = inspect.signature(getattr(Console, method_name))
+                handler = cls.create_unknown_event_handler(method_name, signature)
+                setattr(cls, method_name, handler)
+
+    @classmethod
+    def create_event_handler(cls, method_name: str, event_name: str, signature: inspect.Signature):
+        func_signature, call_params = cls.create_signatures_and_params(signature)
+
+        event_handler_str = textwrap.dedent(f"""
+        def {method_name}({", ".join(func_signature)}):
+            self.publish_known_event('{event_name}', {", ".join(call_params)})
+        """)
+        print(event_handler_str)
+        exec(event_handler_str)
+        return t.cast(t.Callable[[t.Any], t.Any], locals()[method_name])
+
+    @classmethod
+    def create_signatures_and_params(cls, signature: inspect.Signature):
+        func_signature: list[str] = []
+        call_params: list[str] = []
+        for param_name, param in signature.parameters.items():
+            if param_name == "self":
+                func_signature.append("self")
+                continue
+
+            if param.default is inspect._empty:
+                param_type_name = param.annotation
+                if not isinstance(param_type_name, str):
+                    param_type_name = param_type_name.__name__
+                func_signature.append(f"{param_name}: '{param_type_name}'")
+                print(func_signature)
+            else:
+                default_value = param.default
+                param_type_name = param.annotation
+                if not isinstance(param_type_name, str):
+                    param_type_name = param_type_name.__name__
+                if isinstance(param.default, str):
+                    default_value = f"'{param.default}'"
+                func_signature.append(f"{param_name}: '{param_type_name}' = {default_value}")
+                print(func_signature)
+            call_params.append(f"{param_name}={param_name}")
+        return (func_signature, call_params)
+
+    @classmethod
+    def create_unknown_event_handler(cls, method_name: str, signature: inspect.Signature):
+        func_signature, call_params = cls.create_signatures_and_params(signature)
+
+        event_handler_str = textwrap.dedent(f"""
+        def {method_name}({", ".join(func_signature)}):
+            self.publish_unknown_event('{method_name}', {", ".join(call_params)})
+        """)
+        print(event_handler_str)
+        exec(event_handler_str)
+        return t.cast(t.Callable[[t.Any], t.Any], locals()[method_name])
+
+    def __init__(self, log_override: logging.Logger | None = None) -> None:
+        self._handlers: dict[str, ConsoleEventHandler] = {}
+        self.logger = log_override or logger
+        self.id = str(uuid.uuid4())
+        self.logger.debug(f"EventConsole[{self.id}]: created")
+        self.categorizer = None
+
+    def publish_known_event(self, event_name: str, **kwargs: t.Any) -> None:
+        console_event = get_console_event_by_name(event_name)
+        assert console_event is not None, f"Event {event_name} not found"
+        
+        expected_kwargs_fields = console_event.__dataclass_fields__
+        expected_kwargs: dict[str, t.Any] = {}
+        unknown_args: dict[str, t.Any] = {}
+        for key, value in kwargs.items():
+            if key not in expected_kwargs_fields:
+                unknown_args[key] = value
+            else:
+                expected_kwargs[key] = value
+        
+        event = console_event(**expected_kwargs, unknown_args=unknown_args)
+
+        self.publish(event)
+
+    def publish(self, event: ConsoleEvent) -> None:
+        self.logger.debug(
+            f"EventConsole[{self.id}]: sending event to {len(self._handlers)}"
+        )
+        for handler in self._handlers.values():
+            handler(event)
+
+    def publish_unknown_event(self, event_name: str, **kwargs: t.Any) -> None:
+        self.logger.debug(
+            f"EventConsole[{self.id}]: sending unknown event to {len(self._handlers)}"
+        )
+        self.logger.debug(f"EventConsole[{self.id}]: unknown event {event_name} {kwargs}")
+
+    def add_handler(self, handler: ConsoleEventHandler) -> str:
+        handler_id = str(uuid.uuid4())
+        self.logger.debug(f"EventConsole[{self.id}]: Adding handler {handler_id}")
+        self._handlers[handler_id] = handler
+        return handler_id
+
+    def remove_handler(self, handler_id: str) -> None:
+        del self._handlers[handler_id]
+                 
+
+class EventConsole(IntrospectingConsole):
     """
     A console implementation that manages and publishes events related to
     SQLMesh operations. The sqlmesh console implementation is mostly for it's
@@ -328,249 +445,32 @@ class EventConsole(Console):
 
     categorizer: SnapshotCategorizer | None = None
 
-    def __init__(self, log_override: logging.Logger | None = None) -> None:
-        self._handlers: dict[str, ConsoleEventHandler] = {}
-        self.logger = log_override or logger
-        self.id = str(uuid.uuid4())
-        self.logger.debug(f"EventConsole[{self.id}]: created")
-        self.categorizer = None
-
-    def add_snapshot_categorizer(self, categorizer: SnapshotCategorizer) -> None:
-        self.categorizer = categorizer
-
-    def start_plan_evaluation(self, plan: EvaluatablePlan) -> None:
-        self.publish(StartPlanEvaluation(plan))
-
-    def stop_plan_evaluation(self) -> None:
-        self.publish(StopPlanEvaluation())
-
-    def start_evaluation_progress(
-        self,
-        batches: dict[Snapshot, int],
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-    ) -> None:
-        self.publish(
-            StartEvaluationProgress(batches, environment_naming_info, default_catalog)
-        )
-
-    def start_snapshot_evaluation_progress(self, snapshot: Snapshot) -> None:
-        self.publish(StartSnapshotEvaluationProgress(snapshot))
-
-    def update_snapshot_evaluation_progress(
-        self, snapshot: Snapshot, batch_idx: int, duration_ms: int | None
-    ) -> None:
-        self.publish(UpdateSnapshotEvaluationProgress(snapshot, batch_idx, duration_ms))
-
-    def stop_evaluation_progress(self, success: bool = True) -> None:
-        self.publish(StopEvaluationProgress(success))
-
-    def start_creation_progress(
-        self,
-        total_tasks: int,
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-    ) -> None:
-        self.publish(
-            StartCreationProgress(total_tasks, environment_naming_info, default_catalog)
-        )
-
-    def update_creation_progress(self, snapshot: SnapshotInfoLike) -> None:
-        self.publish(UpdateCreationProgress(snapshot))
-
-    def stop_creation_progress(self, success: bool = True) -> None:
-        self.publish(StopCreationProgress(success))
-
-    def start_cleanup(self, ignore_ttl: bool) -> bool:
-        event = StartCleanup(ignore_ttl)
-        self.publish(event)
-        return True  # Assuming the cleanup should always proceed, or modify as needed
-
-    def update_cleanup_progress(self, object_name: str) -> None:
-        self.publish(UpdateCleanupProgress(object_name))
-
-    def stop_cleanup(self, success: bool = True) -> None:
-        self.publish(StopCleanup(success))
-
-    def start_promotion_progress(
-        self,
-        total_tasks: int,
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-    ) -> None:
-        self.publish(
-            StartPromotionProgress(
-                total_tasks, environment_naming_info, default_catalog
-            )
-        )
-
-    def update_promotion_progress(
-        self, snapshot: SnapshotInfoLike, promoted: bool
-    ) -> None:
-        self.publish(UpdatePromotionProgress(snapshot, promoted))
-
-    def stop_promotion_progress(self, success: bool = True) -> None:
-        self.publish(StopPromotionProgress(success))
-
-    def start_snapshot_migration_progress(self, total_tasks: int) -> None:
-        self.publish(StartSnapshotMigrationProgress(total_tasks))
-
-    def update_snapshot_migration_progress(self, num_tasks: int) -> None:
-        self.publish(UpdateSnapshotMigrationProgress(num_tasks))
-
-    def log_migration_status(self, success: bool = True) -> None:
-        self.publish(LogMigrationStatus(success))
-
-    def stop_snapshot_migration_progress(self, success: bool = True) -> None:
-        self.publish(StopSnapshotMigrationProgress(success))
-
-    def start_env_migration_progress(self, total_tasks: int) -> None:
-        self.publish(StartEnvMigrationProgress(total_tasks))
-
-    def update_env_migration_progress(self, num_tasks: int) -> None:
-        self.publish(UpdateEnvMigrationProgress(num_tasks))
-
-    def stop_env_migration_progress(self, success: bool = True) -> None:
-        self.publish(StopEnvMigrationProgress(success))
-
-    def show_model_difference_summary(
-        self,
-        context_diff: ContextDiff,
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-        no_diff: bool = True,
-    ) -> None:
-        self.publish(
-            ShowModelDifferenceSummary(
-                context_diff,
-                environment_naming_info,
-                default_catalog,
-                no_diff,
-            )
-        )
-
-    def plan(
-        self,
-        plan_builder: PlanBuilder,
-        auto_apply: bool,
-        default_catalog: str | None,
-        no_diff: bool = False,
-        no_prompts: bool = False,
-    ) -> None:
-        self.logger.debug("building plan created")
-        plan = plan_builder.build()
-        self.logger.debug(f"plan created: {plan}")
-
-        for snapshot in plan.uncategorized:
-            if self.categorizer:
-                plan_builder.set_choice(
-                    snapshot, self.categorizer(snapshot, plan_builder, default_catalog)
-                )
-
-        if auto_apply:
-            plan_builder.apply()
-
-    def log_test_results(
-        self,
-        result: unittest.result.TestResult,
-        output: str | None,
-        target_dialect: str,
-    ) -> None:
-        self.publish(LogTestResults(result, output, target_dialect))
-
-    def show_sql(self, sql: str) -> None:
-        self.publish(ShowSQL(sql))
-
-    def log_status_update(self, message: str) -> None:
-        self.publish(LogStatusUpdate(message))
-
-    def log_error(self, message: str) -> None:
-        self.publish(LogError(message))
-
-    def log_warning(self, short_message: str, long_message: str | None = None) -> None:
-        self.publish(LogWarning(short_message, long_message))
-
-    def log_success(self, message: str) -> None:
-        self.publish(LogSuccess(message))
-
-    def log_failed_models(self, errors: list[NodeExecutionFailedError[str]]) -> None:
-        self.publish(LogFailedModels(errors))
-
-    def log_skipped_models(self, snapshot_names: set[str]) -> None:
-        self.publish(LogSkippedModels(snapshot_names))
-
-    def log_destructive_change(
-        self,
-        snapshot_name: str,
-        dropped_column_names: list[str],
-        alter_expressions: list[Alter],
-        dialect: str,
-        error: bool = True,
-    ) -> None:
-        self.publish(
-            LogDestructiveChange(
-                snapshot_name, dropped_column_names, alter_expressions, dialect, error
-            )
-        )
-
-    def loading_start(self, message: str | None = None) -> uuid.UUID:
-        event_id = uuid.uuid4()
-        self.publish(LoadingStart(message, event_id))
-        return event_id
-
-    def loading_stop(self, id: uuid.UUID) -> None:
-        self.publish(LoadingStop(id))
-
-    def show_schema_diff(self, schema_diff: SchemaDiff) -> None:
-        self.publish(ShowSchemaDiff(schema_diff))
-
-    def show_row_diff(
-        self,
-        row_diff: RowDiff,
-        show_sample: bool = True,
-        skip_grain_check: bool = False,
-    ) -> None:
-        self.publish(ShowRowDiff(row_diff, show_sample, skip_grain_check))
-
-    def publish(self, event: ConsoleEvent) -> None:
-        self.logger.debug(
-            f"EventConsole[{self.id}]: sending event to {len(self._handlers)}"
-        )
-        for handler in self._handlers.values():
-            handler(event)
-
-    def add_handler(self, handler: ConsoleEventHandler) -> str:
-        handler_id = str(uuid.uuid4())
-        self.logger.debug(f"EventConsole[{self.id}]: Adding handler {handler_id}")
-        self._handlers[handler_id] = handler
-        return handler_id
-
-    def remove_handler(self, handler_id: str) -> None:
-        del self._handlers[handler_id]
+    events: t.ClassVar[list[type[ConsoleEvent]]] = [
+        Plan,
+        StartPlanEvaluation,
+        StartEvaluationProgress,
+        UpdatePromotionProgress,
+        StopPromotionProgress,
+        StartSnapshotEvaluationProgress,
+        UpdateSnapshotEvaluationProgress,
+        LogError,
+        LogWarning,
+        LogSuccess,
+        LogFailedModels,
+        LogSkippedModels,
+        LogTestResults,
+        ConsoleException,
+        PrintEnvironments,
+        ShowTableDiffSummary,
+    ]
 
     def exception(self, exc: Exception) -> None:
-        self.publish(ConsoleException(exc))
+        self.publish(ConsoleException(exception=exc))
 
-    def print_environments(self, environments_summary: dict[str, int]) -> None:
-        self.publish(PrintEnvironments(environments_summary))
-
-    def show_table_diff_summary(self, table_diff: TableDiff) -> None:
-        self.publish(ShowTableDiffSummary(table_diff))
-
-    def show_linter_violations(
-        self,
-        violations: list[RuleViolation],
-        model: Model,
-        is_error: bool = False,
+    def add_snapshot_categorizer(
+        self, categorizer: SnapshotCategorizer
     ) -> None:
-        """Show linting violations from SQLMesh.
-
-        Args:
-            violations: List of linting violations to display
-            model: The model being linted
-            is_error: Whether the violations are errors
-        """
-        self.publish(LogWarning("Linting violations found", str(violations)))
+        self.categorizer = categorizer
 
 
 class DebugEventConsole(EventConsole):
@@ -579,178 +479,3 @@ class DebugEventConsole(EventConsole):
     def __init__(self, console: Console):
         super().__init__()
         self._console = console
-
-    def start_plan_evaluation(self, plan: EvaluatablePlan) -> None:
-        super().start_plan_evaluation(plan)
-        self._console.start_plan_evaluation(plan)
-
-    def stop_plan_evaluation(self) -> None:
-        super().stop_plan_evaluation()
-        self._console.stop_plan_evaluation()
-
-    def start_evaluation_progress(
-        self,
-        batches: dict[Snapshot, int],
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-    ) -> None:
-        super().start_evaluation_progress(
-            batches, environment_naming_info, default_catalog
-        )
-        self._console.start_evaluation_progress(
-            batches, environment_naming_info, default_catalog
-        )
-
-    def start_snapshot_evaluation_progress(self, snapshot: Snapshot) -> None:
-        super().start_snapshot_evaluation_progress(snapshot)
-        self._console.start_snapshot_evaluation_progress(snapshot)
-
-    def update_snapshot_evaluation_progress(
-        self, snapshot: Snapshot, batch_idx: int, duration_ms: int | None
-    ) -> None:
-        super().update_snapshot_evaluation_progress(snapshot, batch_idx, duration_ms)
-        self._console.update_snapshot_evaluation_progress(
-            snapshot, batch_idx, duration_ms
-        )
-
-    def stop_evaluation_progress(self, success: bool = True) -> None:
-        super().stop_evaluation_progress(success)
-        self._console.stop_evaluation_progress(success)
-
-    def start_creation_progress(
-        self,
-        total_tasks: int,
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-    ) -> None:
-        super().start_creation_progress(
-            total_tasks, environment_naming_info, default_catalog
-        )
-        self._console.start_creation_progress(
-            total_tasks, environment_naming_info, default_catalog
-        )
-
-    def update_creation_progress(self, snapshot: SnapshotInfoLike) -> None:
-        super().update_creation_progress(snapshot)
-        self._console.update_creation_progress(snapshot)
-
-    def stop_creation_progress(self, success: bool = True) -> None:
-        super().stop_creation_progress(success)
-        self._console.stop_creation_progress(success)
-
-    def update_cleanup_progress(self, object_name: str) -> None:
-        super().update_cleanup_progress(object_name)
-        self._console.update_cleanup_progress(object_name)
-
-    def start_promotion_progress(
-        self,
-        total_tasks: int,
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-    ) -> None:
-        super().start_promotion_progress(
-            total_tasks, environment_naming_info, default_catalog
-        )
-        self._console.start_promotion_progress(
-            total_tasks, environment_naming_info, default_catalog
-        )
-
-    def update_promotion_progress(
-        self, snapshot: SnapshotInfoLike, promoted: bool
-    ) -> None:
-        super().update_promotion_progress(snapshot, promoted)
-        self._console.update_promotion_progress(snapshot, promoted)
-
-    def stop_promotion_progress(self, success: bool = True) -> None:
-        super().stop_promotion_progress(success)
-        self._console.stop_promotion_progress(success)
-
-    def show_model_difference_summary(
-        self,
-        context_diff: ContextDiff,
-        environment_naming_info: EnvironmentNamingInfo,
-        default_catalog: str | None,
-        no_diff: bool = True,
-    ) -> None:
-        super().show_model_difference_summary(
-            context_diff,
-            environment_naming_info,
-            default_catalog,
-            no_diff,
-        )
-        self._console.show_model_difference_summary(
-            context_diff,
-            environment_naming_info,
-            default_catalog,
-            no_diff,
-            # ignored_snapshot_ids,
-        )
-
-    def plan(
-        self,
-        plan_builder: PlanBuilder,
-        auto_apply: bool,
-        default_catalog: str | None,
-        no_diff: bool = False,
-        no_prompts: bool = False,
-    ) -> None:
-        super().plan(plan_builder, auto_apply, default_catalog, no_diff, no_prompts)
-        self._console.plan(
-            plan_builder, auto_apply, default_catalog, no_diff, no_prompts
-        )
-
-    def log_test_results(
-        self,
-        result: unittest.result.TestResult,
-        output: str | None,
-        target_dialect: str,
-    ) -> None:
-        super().log_test_results(result, output, target_dialect)
-        self._console.log_test_results(result, output, target_dialect)
-
-    def show_sql(self, sql: str) -> None:
-        super().show_sql(sql)
-        self._console.show_sql(sql)
-
-    def log_status_update(self, message: str) -> None:
-        super().log_status_update(message)
-        self._console.log_status_update(message)
-
-    def log_error(self, message: str) -> None:
-        super().log_error(message)
-        self._console.log_error(message)
-
-    def log_success(self, message: str) -> None:
-        super().log_success(message)
-        self._console.log_success(message)
-
-    def loading_start(self, message: str | None = None) -> uuid.UUID:
-        event_id = super().loading_start(message)
-        self._console.loading_start(message)
-        return event_id
-
-    def loading_stop(self, id: uuid.UUID) -> None:
-        super().loading_stop(id)
-        self._console.loading_stop(id)
-
-    def show_schema_diff(self, schema_diff: SchemaDiff) -> None:
-        super().show_schema_diff(schema_diff)
-        self._console.show_schema_diff(schema_diff)
-
-    def show_row_diff(
-        self,
-        row_diff: RowDiff,
-        show_sample: bool = True,
-        skip_grain_check: bool = False,
-    ) -> None:
-        super().show_row_diff(row_diff, show_sample)
-        self._console.show_row_diff(row_diff, show_sample, skip_grain_check)
-
-    def show_linter_violations(
-        self,
-        violations: list[RuleViolation],
-        model: Model,
-        is_error: bool = False,
-    ) -> None:
-        super().show_linter_violations(violations, model, is_error)
-        self._console.show_linter_violations(violations, model, is_error)
