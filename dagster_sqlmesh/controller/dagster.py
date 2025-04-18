@@ -1,3 +1,4 @@
+# pyright: reportPrivateImportUsage=false
 import logging
 
 from dagster import AssetDep, AssetKey, AssetOut
