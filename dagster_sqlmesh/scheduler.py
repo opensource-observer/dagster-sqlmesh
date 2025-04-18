@@ -1,6 +1,7 @@
 import typing as t
 
-from sqlmesh.core.scheduler import CompletionStatus, Scheduler
+from sqlmesh.core.scheduler import Scheduler
+from sqlmesh.utils import CompletionStatus
 
 
 class DagsterSQLMeshScheduler(Scheduler):
