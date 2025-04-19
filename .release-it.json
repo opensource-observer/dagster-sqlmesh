@@ -1,0 +1,35 @@
+{
+  "$schema": "https://unpkg.com/release-it@19/schema/release-it.json",
+  "git": {
+    "commitMessage": "chore: release v${version}"
+  },
+  "github": {
+    "release": true
+  },
+  "npm": {
+    "publish": false,
+    "ignoreVersion": false
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": {
+        "name": "conventionalcommits"
+      },
+      "infile": "CHANGELOG.md"
+    },
+    "@release-it/bumper": {
+      "in": {
+        "file": "pyproject.toml",
+        "path": "project.version"
+      },
+      "out": {
+        "file": "pyproject.toml",
+        "path": "project.version"
+      }
+    }
+  },
+  "hooks": {
+    "before:init": ["make test", "rm -rf dist"],
+    "after:bump": "uv build && uv publish"
+  }
+}
