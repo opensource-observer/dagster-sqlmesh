@@ -27,5 +27,9 @@
         "path": "project.version"
       }
     }
+  },
+  "hooks": {
+    "before:init": ["make test", "rm -r dist"],
+    "after:bump": "uv build && uv publish"
   }
 }
