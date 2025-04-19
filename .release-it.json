@@ -29,7 +29,7 @@
     }
   },
   "hooks": {
-    "before:init": ["make test", "rm -r dist"],
+    "before:init": ["make test", "rm -rf dist"],
     "after:bump": "uv build && uv publish"
   }
 }
