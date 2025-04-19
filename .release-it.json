@@ -18,8 +18,14 @@
       "infile": "CHANGELOG.md"
     },
     "@release-it/bumper": {
-      "in": "pyproject.toml",
-      "out": "pyproject.toml"
+      "in": {
+        "file": "pyproject.toml",
+        "path": "project.version"
+      },
+      "out": {
+        "file": "pyproject.toml",
+        "path": "project.version"
+      }
     }
   }
 }
