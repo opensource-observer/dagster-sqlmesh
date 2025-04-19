@@ -1,5 +1,9 @@
 # Changelog
 
+## <small>0.13.1 (2025-04-19)</small>
+
+* chore: more tests to release ([ae57463](https://github.com/opensource-observer/oso/commit/ae57463))
+
 ## 0.13.0 (2025-04-19)
 
 * chore: add release-it ([a7ee3cf](https://github.com/opensource-observer/oso/commit/a7ee3cf))
