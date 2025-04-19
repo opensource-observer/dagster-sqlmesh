@@ -1,0 +1,62 @@
+name: Trigger Release
+env:
+  GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+  UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: git config
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: |
+            - recursive: true
+              args: [--frozen-lockfile, --strict-peer-dependencies]
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras
+
+      - name: Type Check (Python)
+        run: |
+          pnpm pyright
+
+      - name: Lint (Python)
+        run: |
+          uv run ruff check
+
+      - name: Test (Python)
+        run: |
+          uv run pytest
+
+      - name: Run the sample dagster project
+        run: |
+          uv run dagster job execute -f sample/dagster_project/definitions.py -j all_assets_job
+
+      - name: Run the release
+        run: |
+          pnpm release
+        
