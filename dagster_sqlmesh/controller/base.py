@@ -290,6 +290,7 @@ class SQLMeshInstance:
         self,
         *,
         select_models: list[str] | None = None,
+        restate_models: list[str] | None = None,
         restate_selected: bool = False,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
@@ -316,6 +317,7 @@ class SQLMeshInstance:
                 "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` instead"
             )
         select_models = select_models or []
+        restate_models = restate_models or []
 
         if start:
             plan_options["start"] = start
@@ -324,14 +326,14 @@ class SQLMeshInstance:
             plan_options["end"] = end
             run_options["end"] = end
 
+        if restate_models:
+            plan_options["restate_models"] = restate_models
         if select_models:
+            plan_options["select_models"] = select_models
+            run_options["select_models"] = select_models
             if restate_selected:
                 plan_options["restate_models"] = select_models
-                plan_options["select_models"] = select_models
-            else:
-                plan_options["select_models"] = select_models
-            run_options["select_models"] = select_models
-
+        
         try:
             self.logger.debug("starting sqlmesh plan")
             self.logger.debug(f"selected models: {select_models}")
