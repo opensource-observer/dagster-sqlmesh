@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.0 (2025-04-21)
+
+* feat: allow restating models and any downstream deps (#40) ([ac1b870](https://github.com/opensource-observer/oso/commit/ac1b870)), closes [#40](https://github.com/opensource-observer/oso/issues/40)
+
 ## <small>0.13.1 (2025-04-19)</small>
 
 * chore: more tests to release ([ae57463](https://github.com/opensource-observer/oso/commit/ae57463))
