@@ -4,7 +4,6 @@ import typing as t
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TypeVar
 
 from sqlmesh.core.config import CategorizerConfig
 from sqlmesh.core.console import set_console
@@ -28,8 +27,14 @@ from ..translator import SQLMeshDagsterTranslator
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T", bound="SQLMeshController")
+T = t.TypeVar("T", bound="SQLMeshController")
+ContextCls = t.TypeVar("ContextCls", bound=Context)
+ContextFactory = t.Callable[..., ContextCls]
 
+def default_context_factory(**kwargs: t.Any) -> Context:
+    return Context(**kwargs)
+
+DEFAULT_CONTEXT_FACTORY: ContextFactory[Context] = default_context_factory
 
 class PlanOptions(t.TypedDict):
     start: t.NotRequired[TimeLike]
@@ -89,7 +94,7 @@ class SQLMeshModelDep:
         return parse_fqn(self.fqn)
 
 
-class SQLMeshInstance:
+class SQLMeshInstance(t.Generic[ContextCls]):
     """
     A class that manages sqlmesh operations and context within a specific
     environment. This class will run sqlmesh in a separate thread.
@@ -111,7 +116,7 @@ class SQLMeshInstance:
     config: SQLMeshContextConfig
     console: EventConsole
     logger: logging.Logger
-    context: Context
+    context: ContextCls 
     environment: str
 
     def __init__(
@@ -119,7 +124,7 @@ class SQLMeshInstance:
         environment: str,
         console: EventConsole,
         config: SQLMeshContextConfig,
-        context: Context,
+        context: ContextCls,
         logger: logging.Logger,
     ):
         self.environment = environment
@@ -168,7 +173,7 @@ class SQLMeshInstance:
         def run_sqlmesh_thread(
             logger: logging.Logger,
             context: Context,
-            controller: SQLMeshController,
+            controller: SQLMeshController[ContextCls],
             environment: str,
             plan_options: PlanOptions,
             default_catalog: str,
@@ -252,7 +257,7 @@ class SQLMeshInstance:
         def run_sqlmesh_thread(
             logger: logging.Logger,
             context: Context,
-            controller: SQLMeshController,
+            controller: SQLMeshController[ContextCls],
             environment: str,
             run_options: RunOptions,
         ) -> None:
@@ -365,8 +370,7 @@ class SQLMeshInstance:
                 continue
             yield (model, deps)
 
-
-class SQLMeshController:
+class SQLMeshController(t.Generic[ContextCls]):
     """Allows control of sqlmesh via a python interface. It is not suggested to
     use the constructor of this class directly, but instead use the provided
     `setup` or `setup_with_config` class methods.
@@ -407,27 +411,34 @@ class SQLMeshController:
     def setup(
         cls,
         path: str,
+        *,
+        context_factory: ContextFactory[ContextCls],
         gateway: str = "local",
         log_override: logging.Logger | None = None,
         translator_override: SQLMeshDagsterTranslator | None = None,
-    ) -> "SQLMeshController":
+    ) -> t.Self:
         return cls.setup_with_config(
             config=SQLMeshContextConfig(path=path, gateway=gateway),
-            log_override=log_override, translator_override=translator_override
+            log_override=log_override,
+            translator_override=translator_override,
+            context_factory=context_factory,
         )
 
     @classmethod
     def setup_with_config(
-        cls: type[T],
+        cls,
+        *,
         config: SQLMeshContextConfig,
+        context_factory: ContextFactory[ContextCls] = DEFAULT_CONTEXT_FACTORY,
         log_override: logging.Logger | None = None,
         translator_override: SQLMeshDagsterTranslator | None = None,
-    ) -> T:
+    ) -> t.Self:
         console = EventConsole(log_override=log_override) # type: ignore
         controller = cls(
             console=console,
             config=config,
             log_override=log_override,
+            context_factory=context_factory,
             translator_override=translator_override
         )
         return controller
@@ -436,12 +447,14 @@ class SQLMeshController:
         self,
         config: SQLMeshContextConfig,
         console: EventConsole,
+        context_factory: ContextFactory[ContextCls],
         log_override: logging.Logger | None = None,
         translator_override: SQLMeshDagsterTranslator | None = None,
     ) -> None:
         self.config = config
         self.console = console
         self.logger = log_override or logger
+        self._context_factory = context_factory
         self.translator = translator_override or SQLMeshDagsterTranslator()
         self._context_open = False
 
@@ -455,7 +468,7 @@ class SQLMeshController:
     def remove_event_handler(self, handler_id: str) -> None:
         self.console.remove_handler(handler_id)
 
-    def _create_context(self) -> Context:
+    def _create_context(self) -> ContextCls:
         options: dict[str, t.Any] = dict(
             paths=self.config.path,
             gateway=self.config.gateway,
@@ -463,12 +476,12 @@ class SQLMeshController:
         if self.config.sqlmesh_config:
             options["config"] = self.config.sqlmesh_config
         set_console(self.console)
-        return Context(**options)
+        return self._context_factory(**options)
     
     @contextmanager
     def instance(
         self, environment: str, component: str = "unknown"
-    ) -> t.Iterator[SQLMeshInstance]:
+    ) -> t.Iterator[SQLMeshInstance[ContextCls]]:
         self.logger.info(
             f"Opening sqlmesh instance for env={environment} component={component}"
         )

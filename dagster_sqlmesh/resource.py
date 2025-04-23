@@ -12,6 +12,12 @@ from sqlmesh.core.snapshot import Snapshot, SnapshotInfoLike, SnapshotTableInfo
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 
+from dagster_sqlmesh.controller.base import (
+    DEFAULT_CONTEXT_FACTORY,
+    ContextCls,
+    ContextFactory,
+)
+
 from . import console
 from .config import SQLMeshContextConfig
 from .controller import PlanOptions, RunOptions
@@ -173,7 +179,9 @@ class DagsterSQLMeshEventHandler:
             case console.StopPlanEvaluation:
                 log_context.info("Plan evaluation completed")
             case console.StartEvaluationProgress(
-                batched_intervals=batches, environment_naming_info=environment_naming_info, default_catalog=default_catalog
+                batched_intervals=batches,
+                environment_naming_info=environment_naming_info,
+                default_catalog=default_catalog,
             ):
                 self.update_stage("run")
                 log_context.info(
@@ -267,6 +275,7 @@ class SQLMeshResource(ConfigurableResource):
         self,
         context: AssetExecutionContext,
         *,
+        context_factory: ContextFactory[ContextCls] = DEFAULT_CONTEXT_FACTORY,
         translator: SQLMeshDagsterTranslator | None = None,
         environment: str = "dev",
         start: TimeLike | None = None,
@@ -287,7 +296,7 @@ class SQLMeshResource(ConfigurableResource):
 
         logger = context.log
 
-        controller = self.get_controller(logger, translator)
+        controller = self.get_controller(context_factory, logger, translator)
 
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
@@ -334,13 +343,20 @@ class SQLMeshResource(ConfigurableResource):
                 plan_options=plan_options,
                 run_options=run_options,
             ):
+                logger.debug(f"sqlmesh event: {event}")
                 event_handler.process_events(event)
 
             yield from event_handler.notify_success(mesh.context)
 
     def get_controller(
-        self, log_override: logging.Logger | None = None, translator: SQLMeshDagsterTranslator | None = None
-    ) -> DagsterSQLMeshController:
+        self,
+        context_factory: ContextFactory[ContextCls],
+        log_override: logging.Logger | None = None,
+        translator: SQLMeshDagsterTranslator | None = None
+    ) -> DagsterSQLMeshController[ContextCls]:
         return DagsterSQLMeshController.setup_with_config(
-            self.config, log_override=log_override, translator_override=translator
+            config=self.config,
+            context_factory=context_factory,
+            log_override=log_override,
+            translator_override=translator
         )

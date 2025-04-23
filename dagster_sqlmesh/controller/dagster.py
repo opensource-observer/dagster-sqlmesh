@@ -7,12 +7,12 @@ from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 
 from ..translator import SQLMeshDagsterTranslator
 from ..types import SQLMeshModelDep, SQLMeshMultiAssetOptions
-from .base import SQLMeshController
+from .base import ContextCls, SQLMeshController
 
 logger = logging.getLogger(__name__)
 
 
-class DagsterSQLMeshController(SQLMeshController):
+class DagsterSQLMeshController(SQLMeshController[ContextCls]):
     """An extension of the sqlmesh controller specifically for dagster use"""
 
     def to_asset_outs(
