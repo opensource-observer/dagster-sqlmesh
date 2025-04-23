@@ -24,6 +24,7 @@ from ..console import (
     SnapshotCategorizer,
 )
 from ..events import ConsoleGenerator
+from ..translator import SQLMeshDagsterTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +401,7 @@ class SQLMeshController:
     config: SQLMeshContextConfig
     console: EventConsole
     logger: logging.Logger
+    translator: SQLMeshDagsterTranslator
 
     @classmethod
     def setup(
@@ -407,10 +409,11 @@ class SQLMeshController:
         path: str,
         gateway: str = "local",
         log_override: logging.Logger | None = None,
+        translator_override: SQLMeshDagsterTranslator | None = None,
     ) -> "SQLMeshController":
         return cls.setup_with_config(
             config=SQLMeshContextConfig(path=path, gateway=gateway),
-            log_override=log_override,
+            log_override=log_override, translator_override=translator_override
         )
 
     @classmethod
@@ -418,12 +421,14 @@ class SQLMeshController:
         cls: type[T],
         config: SQLMeshContextConfig,
         log_override: logging.Logger | None = None,
+        translator_override: SQLMeshDagsterTranslator | None = None,
     ) -> T:
         console = EventConsole(log_override=log_override) # type: ignore
         controller = cls(
             console=console,
             config=config,
             log_override=log_override,
+            translator_override=translator_override
         )
         return controller
 
@@ -432,10 +437,12 @@ class SQLMeshController:
         config: SQLMeshContextConfig,
         console: EventConsole,
         log_override: logging.Logger | None = None,
+        translator_override: SQLMeshDagsterTranslator | None = None,
     ) -> None:
         self.config = config
         self.console = console
         self.logger = log_override or logger
+        self.translator = translator_override or SQLMeshDagsterTranslator()
         self._context_open = False
 
     def set_logger(self, logger: logging.Logger) -> None:
@@ -457,7 +464,7 @@ class SQLMeshController:
             options["config"] = self.config.sqlmesh_config
         set_console(self.console)
         return Context(**options)
-
+    
     @contextmanager
     def instance(
         self, environment: str, component: str = "unknown"

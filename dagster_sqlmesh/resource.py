@@ -16,7 +16,7 @@ from . import console
 from .config import SQLMeshContextConfig
 from .controller import PlanOptions, RunOptions
 from .controller.dagster import DagsterSQLMeshController
-from .utils import sqlmesh_model_name_to_key
+from .translator import SQLMeshDagsterTranslator
 
 
 class MaterializationTracker:
@@ -24,8 +24,9 @@ class MaterializationTracker:
     order. This is necessary because sqlmesh may skip some materializations that
     have no changes and those will be reported as completed out of order."""
 
-    def __init__(self, sorted_dag: list[str], logger: logging.Logger) -> None:
+    def __init__(self, sorted_dag: list[str], logger: logging.Logger, translator: SQLMeshDagsterTranslator) -> None:
         self.logger = logger
+        self.translator = translator
         self._batches: dict[Snapshot, int] = {}
         self._count: dict[Snapshot, int] = {}
         self._complete_update_status: dict[str, bool] = {}
@@ -114,12 +115,14 @@ class DagsterSQLMeshEventHandler:
         models_map: dict[str, Model],
         dag: DAG[t.Any],
         prefix: str,
+        translator: SQLMeshDagsterTranslator
     ) -> None:
         self._models_map = models_map
         self._prefix = prefix
         self._context = context
         self._logger = context.log
-        self._tracker = MaterializationTracker(dag.sorted[:], self._logger)
+        self.translator = translator
+        self._tracker = MaterializationTracker(sorted_dag=dag.sorted[:], logger=self._logger, translator=self.translator)
         self._stage = "plan"
 
     def process_events(self, event: console.ConsoleEvent) -> None:
@@ -143,7 +146,8 @@ class DagsterSQLMeshEventHandler:
             # We allow selecting models. That value is mapped to models_map.
             # If the model is not in models_map, we can skip any notification
             if model:
-                output_key = sqlmesh_model_name_to_key(model.name)
+                # Passing model.fqn to translator
+                output_key = self.translator.get_asset_key_str(model.fqn)
                 asset_key = self._context.asset_key_for_output(output_key)
                 yield MaterializeResult(
                     asset_key=asset_key,
@@ -192,7 +196,7 @@ class DagsterSQLMeshEventHandler:
                 log_context.info(
                     "Snapshot progress update",
                     {
-                        "asset_key": sqlmesh_model_name_to_key(snapshot.model.name),
+                        "asset_key": self.translator.get_asset_key_str(snapshot.model.name),
                         "progress": f"{done}/{expected}",
                         "duration_ms": duration_ms,
                     },
@@ -263,6 +267,7 @@ class SQLMeshResource(ConfigurableResource):
         self,
         context: AssetExecutionContext,
         *,
+        translator: SQLMeshDagsterTranslator | None = None,
         environment: str = "dev",
         start: TimeLike | None = None,
         end: TimeLike | None = None,
@@ -277,9 +282,12 @@ class SQLMeshResource(ConfigurableResource):
         plan_options = plan_options or {}
         run_options = run_options or {}
 
+        if translator is None:
+            translator = SQLMeshDagsterTranslator()
+
         logger = context.log
 
-        controller = self.get_controller(logger)
+        controller = self.get_controller(logger, translator)
 
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
@@ -295,7 +303,7 @@ class SQLMeshResource(ConfigurableResource):
                 models_map = {}
                 for key, model in models.items():
                     if (
-                        sqlmesh_model_name_to_key(model.name)
+                        translator.get_asset_key_str(model.fqn)
                         in context.selected_output_names
                     ):
                         models_map[key] = model
@@ -312,7 +320,8 @@ class SQLMeshResource(ConfigurableResource):
                 logger.info(f"selected models: {select_models}")
 
             event_handler = DagsterSQLMeshEventHandler(
-                context, models_map, dag, "sqlmesh: "
+                context=context, models_map=models_map, dag=dag,
+                prefix="sqlmesh: ", translator=translator
             )
 
             for event in mesh.plan_and_run(
@@ -330,8 +339,8 @@ class SQLMeshResource(ConfigurableResource):
             yield from event_handler.notify_success(mesh.context)
 
     def get_controller(
-        self, log_override: logging.Logger | None = None
+        self, log_override: logging.Logger | None = None, translator: SQLMeshDagsterTranslator | None = None
     ) -> DagsterSQLMeshController:
         return DagsterSQLMeshController.setup_with_config(
-            self.config, log_override=log_override
+            self.config, log_override=log_override, translator_override=translator
         )

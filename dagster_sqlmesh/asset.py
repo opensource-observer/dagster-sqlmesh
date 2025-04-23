@@ -25,10 +25,11 @@ def sqlmesh_assets(
     # For now we don't set this by default
     enabled_subsetting: bool = False,
 ) -> t.Callable[[t.Callable[..., t.Any]], AssetsDefinition]:
-    controller = DagsterSQLMeshController.setup_with_config(config)
     if not dagster_sqlmesh_translator:
-        dagster_sqlmesh_translator = SQLMeshDagsterTranslator()
-    conversion = controller.to_asset_outs(environment, dagster_sqlmesh_translator)
+        dagster_sqlmesh_translator = dagster_sqlmesh_translator
+    
+    controller = DagsterSQLMeshController.setup_with_config(config)
+    conversion = controller.to_asset_outs(environment, translator=dagster_sqlmesh_translator)
 
     return multi_asset(
         name=name,
