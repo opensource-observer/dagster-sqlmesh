@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import duckdb
 import polars
+from sqlmesh import Context
 from sqlmesh.utils.date import TimeLike
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
@@ -21,9 +22,9 @@ class SQLMeshTestContext:
     db_path: str
     context_config: SQLMeshContextConfig
 
-    def create_controller(self):
+    def create_controller(self) -> DagsterSQLMeshController[Context]:
         return DagsterSQLMeshController.setup_with_config(
-            self.context_config, 
+            config=self.context_config, 
         )
 
     def query(self, *args: t.Any, **kwargs: t.Any) -> list[t.Any]:
