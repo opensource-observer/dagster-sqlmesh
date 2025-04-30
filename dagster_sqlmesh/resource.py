@@ -1,16 +1,19 @@
 import logging
 import typing as t
+from types import MappingProxyType
 
 from dagster import (
     AssetExecutionContext,
     ConfigurableResource,
     MaterializeResult,
 )
+from dagster._core.errors import DagsterInvalidPropertyError
 from sqlmesh import Model
 from sqlmesh.core.context import Context as SQLMeshContext
 from sqlmesh.core.snapshot import Snapshot, SnapshotInfoLike, SnapshotTableInfo
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
+from sqlmesh.utils.errors import SQLMeshError
 
 from dagster_sqlmesh.controller.base import (
     DEFAULT_CONTEXT_FACTORY,
@@ -113,6 +116,24 @@ class SQLMeshEventLogContext:
         return self._event.__class__.__name__
 
 
+class GenericSQLMeshError(Exception):
+    pass
+
+
+class FailedModelError(Exception):
+    def __init__(self, model_name: str, message: str | None) -> None:
+        super().__init__(message)
+        self.model_name = model_name
+        self.message = message
+
+
+class PlanOrRunFailedError(Exception):
+    def __init__(self, stage: str, message: str, errors: list[Exception]) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.errors = errors
+
+
 class DagsterSQLMeshEventHandler:
     def __init__(
         self,
@@ -120,6 +141,7 @@ class DagsterSQLMeshEventHandler:
         models_map: dict[str, Model],
         dag: DAG[t.Any],
         prefix: str,
+        is_testing: bool = False,
     ) -> None:
         self._models_map = models_map
         self._prefix = prefix
@@ -127,6 +149,8 @@ class DagsterSQLMeshEventHandler:
         self._logger = context.log
         self._tracker = MaterializationTracker(dag.sorted[:], self._logger)
         self._stage = "plan"
+        self._errors: list[Exception] = []
+        self._is_testing = is_testing
 
     def process_events(self, event: console.ConsoleEvent) -> None:
         self.report_event(event)
@@ -150,14 +174,17 @@ class DagsterSQLMeshEventHandler:
             # If the model is not in models_map, we can skip any notification
             if model:
                 output_key = sqlmesh_model_name_to_key(model.name)
-                asset_key = self._context.asset_key_for_output(output_key)
-                yield MaterializeResult(
-                    asset_key=asset_key,
-                    metadata={
-                        "updated": update_status,
-                        "duration_ms": 0,
-                    },
-                )
+                if not self._is_testing:
+                    # Stupidly dagster when testing cannot use the following
+                    # method so we must specifically skip this when testing
+                    asset_key = self._context.asset_key_for_output(output_key)
+                    yield MaterializeResult(
+                        asset_key=asset_key,
+                        metadata={
+                            "updated": update_status,
+                            "duration_ms": 0,
+                        },
+                    )
             notify = self._tracker.notify_queue_next()
 
     def report_event(self, event: console.ConsoleEvent) -> None:
@@ -210,19 +237,22 @@ class DagsterSQLMeshEventHandler:
                 if success:
                     log_context.info("sqlmesh ran successfully")
                 else:
-                    log_context.error("sqlmesh failed")
-                    raise Exception("sqlmesh failed during run")
+                    log_context.error("sqlmesh failed. check collected errors")
             case console.LogError(message=message):
                 log_context.error(
                     f"sqlmesh reported an error: {message}",
                 )
-            case console.LogFailedModels(models=models):
-                if len(models) != 0:
+                self._errors.append(GenericSQLMeshError(message))
+            case console.LogFailedModels(errors=errors):
+                if len(errors) != 0:
                     failed_models = "\n".join(
-                        [f"{model!s}\n{model.__cause__!s}" for model in models]
+                        [f"{error.node!s}\n{error.__cause__!s}" for error in errors]
                     )
                     log_context.error(f"sqlmesh failed models: {failed_models}")
-                    raise Exception("sqlmesh has failed models")
+                    for error in errors:
+                        self._errors.append(
+                            FailedModelError(error.node, str(error.__cause__))
+                        )
             case console.UpdatePromotionProgress(snapshot=snapshot, promoted=promoted):
                 log_context.info(
                     "Promotion progress update",
@@ -263,9 +293,18 @@ class DagsterSQLMeshEventHandler:
     def update_stage(self, stage: str):
         self._stage = stage
 
+    @property
+    def stage(self) -> str:
+        return self._stage
+
+    @property
+    def errors(self) -> list[Exception]:
+        return self._errors[:]
+
 
 class SQLMeshResource(ConfigurableResource):
     config: SQLMeshContextConfig
+    is_testing: bool = False
 
     def run(
         self,
@@ -293,25 +332,16 @@ class SQLMeshResource(ConfigurableResource):
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
 
-            select_models = []
-
             models = mesh.models()
             models_map = models.copy()
             all_available_models = set(
                 [model.fqn for model, _ in mesh.non_external_models_dag()]
             )
-            if context.selected_output_names:
-                models_map = {}
-                for key, model in models.items():
-                    if (
-                        sqlmesh_model_name_to_key(model.name)
-                        in context.selected_output_names
-                    ):
-                        models_map[key] = model
-                        select_models.append(model.name)
-            selected_models_set = set(models_map.keys())
+            selected_models_set, models_map, select_models = (
+                self._get_selected_models_from_context(context, models)
+            )
 
-            if all_available_models == selected_models_set:
+            if all_available_models == selected_models_set or select_models is None:
                 logger.info("all models selected")
 
                 # Setting this to none to allow sqlmesh to select all models and
@@ -321,23 +351,60 @@ class SQLMeshResource(ConfigurableResource):
                 logger.info(f"selected models: {select_models}")
 
             event_handler = DagsterSQLMeshEventHandler(
-                context, models_map, dag, "sqlmesh: "
+                context, models_map, dag, "sqlmesh: ", is_testing=self.is_testing
             )
 
-            for event in mesh.plan_and_run(
-                start=start,
-                end=end,
-                select_models=select_models,
-                restate_models=restate_models,
-                restate_selected=restate_selected,
-                skip_run=skip_run,
-                plan_options=plan_options,
-                run_options=run_options,
-            ):
-                logger.debug(f"sqlmesh event: {event}")
-                event_handler.process_events(event)
-
+            try:
+                for event in mesh.plan_and_run(
+                    start=start,
+                    end=end,
+                    select_models=select_models,
+                    restate_models=restate_models,
+                    restate_selected=restate_selected,
+                    skip_run=skip_run,
+                    plan_options=plan_options,
+                    run_options=run_options,
+                ):
+                    logger.debug(f"sqlmesh event: {event}")
+                    event_handler.process_events(event)
+            except SQLMeshError as e:
+                logger.error(f"sqlmesh error: {e}")
+                errors = event_handler.errors
+                for error in errors:
+                    logger.error(f"sqlmesh encountered the following error during sqlmesh {event_handler.stage}: {error}")
+                raise PlanOrRunFailedError(
+                    event_handler.stage,
+                    f"sqlmesh failed during {event_handler.stage} with {len(event_handler.errors) + 1} errors",
+                    [e, *event_handler.errors],
+                )
             yield from event_handler.notify_success(mesh.context)
+
+    def _get_selected_models_from_context(
+        self, context: AssetExecutionContext, models: MappingProxyType[str, Model]
+    ) -> tuple[set[str], dict[str, Model], list[str] | None]:
+        models_map = models.copy()
+        try:
+            selected_output_names = set(context.selected_output_names)
+        except (DagsterInvalidPropertyError, AttributeError) as e:
+            # Special case for direct execution context when testing. This is related to:
+            # https://github.com/dagster-io/dagster/issues/23633
+            if "DirectOpExecutionContext" in str(e):
+                context.log.warning("Caught an error that is likely a direct execution")
+                return (set(models_map.keys()), models_map, None)
+            else:
+                raise e
+
+        select_models: list[str] = []
+        models_map = {}
+        for key, model in models.items():
+            if sqlmesh_model_name_to_key(model.name) in selected_output_names:
+                models_map[key] = model
+                select_models.append(model.name)
+        return (
+            set(models_map.keys()),
+            models_map,
+            select_models,
+        )
 
     def get_controller(
         self,

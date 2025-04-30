@@ -405,14 +405,14 @@ class IntrospectingConsole(Console):
 
     def publish(self, event: ConsoleEvent) -> None:
         self.logger.debug(
-            f"EventConsole[{self.id}]: sending event to {len(self._handlers)}"
+            f"EventConsole[{self.id}]: sending event {event.__class__.__name__} to {len(self._handlers)}"
         )
         for handler in self._handlers.values():
             handler(event)
 
     def publish_unknown_event(self, event_name: str, **kwargs: t.Any) -> None:
         self.logger.debug(
-            f"EventConsole[{self.id}]: sending unknown event to {len(self._handlers)}"
+            f"EventConsole[{self.id}]: sending unknown '{event_name}' event to {len(self._handlers)} handlers"
         )
         self.logger.debug(f"EventConsole[{self.id}]: unknown event {event_name} {kwargs}")
 

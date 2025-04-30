@@ -178,7 +178,17 @@ class SQLMeshInstance(t.Generic[ContextCls]):
             default_catalog: str,
         ) -> None:
             logger.debug("dagster-sqlmesh: thread started")
+
+            def auto_execute_plan(event: ConsoleEvent):
+                if isinstance(event, Plan):
+                    try:
+                        event.plan_builder.apply()
+                    except Exception as e:
+                        controller.console.exception(e)
+                return None
+
             try:
+                controller.console.add_handler(auto_execute_plan)
                 builder = t.cast(
                     PlanBuilder,
                     context.plan_builder(
@@ -191,7 +201,7 @@ class SQLMeshInstance(t.Generic[ContextCls]):
                     builder,
                     auto_apply=True,
                     default_catalog=default_catalog,
-                )
+                ) 
             except Exception as e:
                 controller.console.exception(e)
             except:  # noqa: E722
@@ -218,16 +228,18 @@ class SQLMeshInstance(t.Generic[ContextCls]):
             thread.start()
 
             self.logger.debug("waiting for events")
-            for event in generator.events(thread):
-                match event:
-                    case ConsoleException(exception=e):
-                        raise e
-                    case Plan(plan_builder=plan_builder, auto_apply=auto_apply):
-                        if auto_apply:
-                            plan_builder.apply()
-                        yield event
-                    case _:
-                        yield event
+            try:
+                for event in generator.events(thread):
+                    match event:
+                        case ConsoleException(exception=e):
+                            raise e
+                        case _:
+                            yield event
+            except Exception as e:
+                import traceback
+                print("An exception occurred:")
+                print(traceback.format_exc())
+                raise
 
             thread.join()
 

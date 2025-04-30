@@ -51,6 +51,7 @@ useLibraryCodeForTypes = true
 reportMissingReturnType = true
 reportIncompleteStub = true
 reportUntypedFunctionDecorator = false
+reportPrivateImportUsage = false
 
 [tool.ruff.lint]
 # Ignore E402: Module level import not at top of file

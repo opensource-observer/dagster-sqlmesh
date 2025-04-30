@@ -5,14 +5,48 @@ from dataclasses import dataclass
 import duckdb
 import polars
 from sqlmesh import Context
+from sqlmesh.core.config import (
+    Config as SQLMeshConfig,
+    DuckDBConnectionConfig,
+    GatewayConfig,
+    ModelDefaultsConfig,
+)
 from sqlmesh.utils.date import TimeLike
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 from dagster_sqlmesh.events import ConsoleRecorder
+from dagster_sqlmesh.resource import SQLMeshResource
 
 logger = logging.getLogger(__name__)
+
+
+def setup_testing_sqlmesh_context_config(*, db_path: str, project_path: str, variables: dict[str, t.Any] | None = None) -> SQLMeshContextConfig:
+    config = SQLMeshConfig(
+        gateways={
+            "local": GatewayConfig(connection=DuckDBConnectionConfig(database=db_path)),
+        },
+        default_gateway="local",
+        model_defaults=ModelDefaultsConfig(dialect="duckdb"),
+        variables=variables or {},
+    )
+    config_as_dict = config.dict()
+    context_config = SQLMeshContextConfig(
+        path=project_path, gateway="local", config_override=config_as_dict
+    )
+    return context_config
+
+def setup_testing_sqlmesh_test_context(
+    *,
+    db_path: str,
+    project_path: str,
+    variables: dict[str, t.Any] | None = None,
+) -> "SQLMeshTestContext":
+    context_config = setup_testing_sqlmesh_context_config(
+        db_path=db_path, project_path=project_path, variables=variables
+    )
+    return SQLMeshTestContext(db_path=db_path, context_config=context_config)
 
 
 @dataclass
@@ -25,6 +59,11 @@ class SQLMeshTestContext:
     def create_controller(self) -> DagsterSQLMeshController[Context]:
         return DagsterSQLMeshController.setup_with_config(
             config=self.context_config, 
+        )
+
+    def create_resource(self) -> SQLMeshResource:
+        return SQLMeshResource(
+            config=self.context_config, is_testing=True,
         )
 
     def query(self, *args: t.Any, **kwargs: t.Any) -> list[t.Any]:

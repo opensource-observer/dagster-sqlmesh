@@ -7,4 +7,4 @@ def test_sqlmesh_context_to_asset_outs(sample_sqlmesh_test_context: SQLMeshTestC
     translator = SQLMeshDagsterTranslator()
     outs = controller.to_asset_outs("dev", translator)
     assert len(list(outs.deps)) == 1
-    assert len(outs.outs) == 9
+    assert len(outs.outs) == 10
