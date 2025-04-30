@@ -23,7 +23,7 @@ def sqlmesh_assets(
     config: SQLMeshContextConfig,
     context_factory: ContextFactory[ContextCls] = lambda **kwargs: Context(**kwargs),
     name: str | None = None,
-    dagster_sqlmesh_translator: SQLMeshDagsterTranslator | None = None,
+    dagster_sqlmesh_translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     compute_kind: str = "sqlmesh",
     op_tags: t.Mapping[str, t.Any] | None = None,
     required_resource_keys: set[str] | None = None,
@@ -32,8 +32,6 @@ def sqlmesh_assets(
     enabled_subsetting: bool = False,
 ) -> t.Callable[[t.Callable[..., t.Any]], AssetsDefinition]:
     controller = DagsterSQLMeshController.setup_with_config(config=config, context_factory=context_factory)
-    if not dagster_sqlmesh_translator:
-        dagster_sqlmesh_translator = dagster_sqlmesh_translator
     
     conversion = controller.to_asset_outs(environment, translator=dagster_sqlmesh_translator)
 

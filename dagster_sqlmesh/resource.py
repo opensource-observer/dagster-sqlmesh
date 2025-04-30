@@ -417,11 +417,11 @@ class SQLMeshResource(ConfigurableResource):
         self,
         context_factory: ContextFactory[ContextCls],
         log_override: logging.Logger | None = None,
-        translator: SQLMeshDagsterTranslator | None = None
+        translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     ) -> DagsterSQLMeshController[ContextCls]:
         return DagsterSQLMeshController.setup_with_config(
             config=self.config,
             context_factory=context_factory,
             log_override=log_override,
-            translator_override=translator
+            translator=translator
         )
