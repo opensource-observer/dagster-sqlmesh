@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0 (2025-04-30)
+
+* feat: update sqlmesh pin to 0.178.2 (#45) ([27245d9](https://github.com/opensource-observer/oso/commit/27245d9)), closes [#45](https://github.com/opensource-observer/oso/issues/45)
+
 ## 0.15.0 (2025-04-23)
 
 * feat: allow passing in custom context (#42) ([63bd837](https://github.com/opensource-observer/oso/commit/63bd837)), closes [#42](https://github.com/opensource-observer/oso/issues/42)
