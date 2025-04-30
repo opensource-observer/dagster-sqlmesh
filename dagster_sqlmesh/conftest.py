@@ -6,15 +6,12 @@ import tempfile
 import typing as t
 
 import pytest
-from sqlmesh.core.config import (
-    Config as SQLMeshConfig,
-    DuckDBConnectionConfig,
-    GatewayConfig,
-    ModelDefaultsConfig,
-)
 
 from dagster_sqlmesh.config import SQLMeshContextConfig
-from dagster_sqlmesh.testing import SQLMeshTestContext
+from dagster_sqlmesh.testing import (
+    SQLMeshTestContext,
+    setup_testing_sqlmesh_context_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,23 +38,19 @@ def sample_sqlmesh_project() -> t.Iterator[str]:
         # Initialize the "source" data
         yield str(project_dir)
 
+@pytest.fixture
+def sample_sqlmesh_db_path(sample_sqlmesh_project: str) -> t.Iterator[str]:
+    db_path = os.path.join(sample_sqlmesh_project, "db.db")
+    yield db_path
+
+@pytest.fixture
+def sample_sqlmesh_test_context_config(sample_sqlmesh_project: str, sample_sqlmesh_db_path: str) -> t.Iterator[SQLMeshContextConfig]:
+    yield setup_testing_sqlmesh_context_config(db_path=sample_sqlmesh_db_path, project_path=sample_sqlmesh_project)
 
 @pytest.fixture
 def sample_sqlmesh_test_context(
-    sample_sqlmesh_project: str,
+    sample_sqlmesh_project: str, sample_sqlmesh_test_context_config: SQLMeshContextConfig, sample_sqlmesh_db_path: str
 ) -> t.Iterator[SQLMeshTestContext]:
-    db_path = os.path.join(sample_sqlmesh_project, "db.db")
-    config = SQLMeshConfig(
-        gateways={
-            "local": GatewayConfig(connection=DuckDBConnectionConfig(database=db_path)),
-        },
-        default_gateway="local",
-        model_defaults=ModelDefaultsConfig(dialect="duckdb"),
-    )
-    config_as_dict = config.dict()
-    context_config = SQLMeshContextConfig(
-        path=sample_sqlmesh_project, gateway="local", config_override=config_as_dict
-    )
-    test_context = SQLMeshTestContext(db_path=db_path, context_config=context_config)
+    test_context = SQLMeshTestContext(db_path=sample_sqlmesh_db_path, context_config=sample_sqlmesh_test_context_config)
     test_context.initialize_test_source()
     yield test_context

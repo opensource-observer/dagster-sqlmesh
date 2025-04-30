@@ -12,3 +12,6 @@ default_gateway: local
 
 model_defaults:
   dialect: duckdb
+
+variables:
+  enable_model_failure: False

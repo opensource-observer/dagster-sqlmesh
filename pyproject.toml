@@ -1,6 +1,6 @@
 [project]
 name = "dagster-sqlmesh"
-version = "0.15.0"
+version = "0.16.0"
 description = ""
 authors = [
     {name = "Reuven Gonzales", email = "reuven@karibalabs.co"}
@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "dagster>=1.7.8",
-    "sqlmesh==0.174.2",
+    "sqlmesh==0.178.2",
     "pytest>=8.3.2",
     "pyarrow>=18.0.0",
 ]
@@ -51,6 +51,7 @@ useLibraryCodeForTypes = true
 reportMissingReturnType = true
 reportIncompleteStub = true
 reportUntypedFunctionDecorator = false
+reportPrivateImportUsage = false
 
 [tool.ruff.lint]
 # Ignore E402: Module level import not at top of file
