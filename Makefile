@@ -64,10 +64,10 @@ dagster-dev: clean-dagster
 
 dev: dagster-dev  # Alias for dagster-dev
 
-dagster-materialize:
+mat-test-source:
 	"$(PYTHON_CMD)" -m dagster asset materialize \
 		-f "$(CURDIR)/sample/dagster_project/definitions.py" \
-		--select "intermediate_model_1" \
+		--select "test_source" \
 		--config-json '{"resources": {"sqlmesh": {"config": {"config": {"gateway": "local", "path": "C:\\\\Users\\\\kevin\\\\git_repos\\\\dagster-sqlmesh - Copy\\\\sample\\\\sqlmesh_project"}, "plan_options_override": {"skip_backfill": false}}}}}'
 
 sqlmesh-plan:
