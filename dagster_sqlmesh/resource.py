@@ -15,17 +15,16 @@ from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 from sqlmesh.utils.errors import SQLMeshError
 
+from dagster_sqlmesh import console
+from dagster_sqlmesh.config import SQLMeshContextConfig
+from dagster_sqlmesh.controller import PlanOptions, RunOptions
 from dagster_sqlmesh.controller.base import (
     DEFAULT_CONTEXT_FACTORY,
     ContextCls,
     ContextFactory,
 )
+from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 from dagster_sqlmesh.utils import get_asset_key_str
-
-from . import console
-from .config import SQLMeshContextConfig
-from .controller import PlanOptions, RunOptions
-from .controller.dagster import DagsterSQLMeshController
 
 
 class MaterializationTracker:

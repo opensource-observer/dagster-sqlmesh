@@ -5,11 +5,10 @@ from inspect import signature
 from dagster import AssetDep, AssetKey, AssetOut
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 
+from dagster_sqlmesh.controller.base import ContextCls, SQLMeshController
+from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
+from dagster_sqlmesh.types import SQLMeshModelDep, SQLMeshMultiAssetOptions
 from dagster_sqlmesh.utils import get_asset_key_str
-
-from ..translator import SQLMeshDagsterTranslator
-from ..types import SQLMeshModelDep, SQLMeshMultiAssetOptions
-from .base import ContextCls, SQLMeshController
 
 logger = logging.getLogger(__name__)
 

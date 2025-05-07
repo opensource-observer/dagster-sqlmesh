@@ -4,14 +4,13 @@ import typing as t
 from dagster import AssetsDefinition, RetryPolicy, multi_asset
 from sqlmesh import Context
 
+from dagster_sqlmesh.config import SQLMeshContextConfig
 from dagster_sqlmesh.controller import (
     ContextCls,
     ContextFactory,
     DagsterSQLMeshController,
 )
 from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
-
-from .config import SQLMeshContextConfig
 
 logger = logging.getLogger(__name__)
 
