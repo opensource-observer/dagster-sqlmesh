@@ -445,7 +445,7 @@ class SQLMeshController(t.Generic[ContextCls]):
             console=console,
             config=config,
             log_override=log_override,
-            context_factory=context_factory
+            context_factory=context_factory,
         )
         return controller
 
@@ -481,7 +481,7 @@ class SQLMeshController(t.Generic[ContextCls]):
             options["config"] = self.config.sqlmesh_config
         set_console(self.console)
         return self._context_factory(**options)
-    
+
     @contextmanager
     def instance(
         self, environment: str, component: str = "unknown"
