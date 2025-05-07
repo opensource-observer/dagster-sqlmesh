@@ -18,7 +18,7 @@ class DagsterSQLMeshController(SQLMeshController[ContextCls]):
     """An extension of the sqlmesh controller specifically for dagster use"""
 
     def to_asset_outs(
-        self, environment: str, translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
+        self, environment: str, translator: SQLMeshDagsterTranslator,
     ) -> SQLMeshMultiAssetOptions:
         with self.instance(environment, "to_asset_outs") as instance:
             context = instance.context
