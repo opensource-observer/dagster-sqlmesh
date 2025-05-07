@@ -5,6 +5,8 @@ from inspect import signature
 from dagster import AssetDep, AssetKey, AssetOut
 from dagster._core.definitions.asset_dep import CoercibleToAssetDep
 
+from dagster_sqlmesh.utils import get_asset_key_str
+
 from ..translator import SQLMeshDagsterTranslator
 from ..types import SQLMeshModelDep, SQLMeshMultiAssetOptions
 from .base import ContextCls, SQLMeshController
@@ -16,10 +18,9 @@ class DagsterSQLMeshController(SQLMeshController[ContextCls]):
     """An extension of the sqlmesh controller specifically for dagster use"""
 
     def to_asset_outs(
-        self, environment: str, translator: SQLMeshDagsterTranslator | None = None,
+        self, environment: str, translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     ) -> SQLMeshMultiAssetOptions:
         with self.instance(environment, "to_asset_outs") as instance:
-            translator = translator or SQLMeshDagsterTranslator()
             context = instance.context
             output = SQLMeshMultiAssetOptions()
             depsMap: dict[str, CoercibleToAssetDep] = {}
@@ -39,12 +40,12 @@ class DagsterSQLMeshController(SQLMeshController[ContextCls]):
                             translator.get_asset_key(context, dep.model.fqn)
                         )
                     else:
-                        table = translator.get_asset_key_str(dep.fqn)
+                        table = get_asset_key_str(dep.fqn)
                         key = translator.get_asset_key(context, dep.fqn)
                         internal_asset_deps.add(key)
                         # create an external dep
                         depsMap[table] = AssetDep(key)
-                model_key = translator.get_asset_key_str(model.fqn)
+                model_key = get_asset_key_str(model.fqn)
                 # If current Dagster supports "kinds", add labels for Dagster UI
                 if "kinds" in signature(AssetOut).parameters:
                     output.outs[model_key] = AssetOut(

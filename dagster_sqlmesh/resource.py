@@ -20,6 +20,7 @@ from dagster_sqlmesh.controller.base import (
     ContextCls,
     ContextFactory,
 )
+from dagster_sqlmesh.utils import get_asset_key_str
 
 from . import console
 from .config import SQLMeshContextConfig
@@ -177,7 +178,7 @@ class DagsterSQLMeshEventHandler:
             # If the model is not in models_map, we can skip any notification
             if model:
                 # Passing model.fqn to translator
-                output_key = self.translator.get_asset_key_str(model.fqn)
+                output_key = get_asset_key_str(model.fqn)
                 if not self._is_testing:
                     # Stupidly dagster when testing cannot use the following
                     # method so we must specifically skip this when testing
@@ -231,7 +232,7 @@ class DagsterSQLMeshEventHandler:
                 log_context.info(
                     "Snapshot progress update",
                     {
-                        "asset_key": self.translator.get_asset_key_str(snapshot.model.name),
+                        "asset_key": get_asset_key_str(snapshot.model.name),
                         "progress": f"{done}/{expected}",
                         "duration_ms": duration_ms,
                     },
@@ -332,7 +333,11 @@ class SQLMeshResource(ConfigurableResource):
 
         logger = context.log
 
-        controller = self.get_controller(context_factory, logger, translator)
+        controller = self.get_controller(
+            context_factory=context_factory,
+            log_override=logger,
+            translator=translator
+        )
 
         with controller.instance(environment) as mesh:
             dag = mesh.models_dag()
@@ -404,7 +409,7 @@ class SQLMeshResource(ConfigurableResource):
         select_models: list[str] = []
         models_map = {}
         for key, model in models.items():
-            if translator.get_asset_key_str(model.fqn) in selected_output_names:
+            if get_asset_key_str(model.fqn) in selected_output_names:
                 models_map[key] = model
                 select_models.append(model.name)
         return (
@@ -416,12 +421,11 @@ class SQLMeshResource(ConfigurableResource):
     def get_controller(
         self,
         context_factory: ContextFactory[ContextCls],
+        translator: SQLMeshDagsterTranslator,
         log_override: logging.Logger | None = None,
-        translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     ) -> DagsterSQLMeshController[ContextCls]:
         return DagsterSQLMeshController.setup_with_config(
             config=self.config,
             context_factory=context_factory,
-            log_override=log_override,
-            translator=translator
+            log_override=log_override
         )

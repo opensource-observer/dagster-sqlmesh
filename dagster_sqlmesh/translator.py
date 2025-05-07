@@ -1,7 +1,7 @@
-import re
 from collections.abc import Sequence
 
 from dagster import AssetKey
+from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 
@@ -15,16 +15,10 @@ class SQLMeshDagsterTranslator:
         return AssetKey(path)
 
     def get_asset_key_name(self, fqn: str) -> Sequence[str]:
-        asset_path = re.findall(r"[A-Za-z0-9_\-]+", fqn)
-        return asset_path
+        table = exp.to_table(fqn)
+        asset_key_name = [table.catalog, table.db, table.name]
 
-    def get_asset_key_str(self, fqn: str) -> str:
-        # This is an internal identifier used to map outputs and dependencies
-        # it will not affect the existing AssetKeys
-        # Only alphanumeric characters and underscores
-        path = self.get_asset_key_name(fqn)
-        
-        return "__dot__".join(path).replace("-", "__dash__")
+        return asset_key_name
     
     def get_group_name(self, context: Context, model: Model) -> str:
         path = self.get_asset_key_name(model.fqn)

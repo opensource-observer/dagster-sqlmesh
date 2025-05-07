@@ -23,7 +23,6 @@ from ..console import (
     SnapshotCategorizer,
 )
 from ..events import ConsoleGenerator
-from ..translator import SQLMeshDagsterTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -417,7 +416,6 @@ class SQLMeshController(t.Generic[ContextCls]):
     config: SQLMeshContextConfig
     console: EventConsole
     logger: logging.Logger
-    translator: SQLMeshDagsterTranslator
 
     @classmethod
     def setup(
@@ -427,12 +425,10 @@ class SQLMeshController(t.Generic[ContextCls]):
         context_factory: ContextFactory[ContextCls],
         gateway: str = "local",
         log_override: logging.Logger | None = None,
-        translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     ) -> t.Self:
         return cls.setup_with_config(
             config=SQLMeshContextConfig(path=path, gateway=gateway),
             log_override=log_override,
-            translator=translator,
             context_factory=context_factory,
         )
 
@@ -443,15 +439,13 @@ class SQLMeshController(t.Generic[ContextCls]):
         config: SQLMeshContextConfig,
         context_factory: ContextFactory[ContextCls] = DEFAULT_CONTEXT_FACTORY,
         log_override: logging.Logger | None = None,
-        translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     ) -> t.Self:
         console = EventConsole(log_override=log_override) # type: ignore
         controller = cls(
             console=console,
             config=config,
             log_override=log_override,
-            context_factory=context_factory,
-            translator=translator
+            context_factory=context_factory
         )
         return controller
 
@@ -461,13 +455,11 @@ class SQLMeshController(t.Generic[ContextCls]):
         console: EventConsole,
         context_factory: ContextFactory[ContextCls],
         log_override: logging.Logger | None = None,
-        translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
     ) -> None:
         self.config = config
         self.console = console
         self.logger = log_override or logger
         self._context_factory = context_factory
-        self.translator = translator
         self._context_open = False
 
     def set_logger(self, logger: logging.Logger) -> None:
