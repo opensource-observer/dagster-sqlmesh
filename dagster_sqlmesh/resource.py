@@ -26,7 +26,6 @@ from . import console
 from .config import SQLMeshContextConfig
 from .controller import PlanOptions, RunOptions
 from .controller.dagster import DagsterSQLMeshController
-from .translator import SQLMeshDagsterTranslator
 
 
 class MaterializationTracker:
@@ -34,9 +33,8 @@ class MaterializationTracker:
     order. This is necessary because sqlmesh may skip some materializations that
     have no changes and those will be reported as completed out of order."""
 
-    def __init__(self, sorted_dag: list[str], logger: logging.Logger, translator: SQLMeshDagsterTranslator) -> None:
+    def __init__(self, sorted_dag: list[str], logger: logging.Logger) -> None:
         self.logger = logger
-        self.translator = translator
         self._batches: dict[Snapshot, int] = {}
         self._count: dict[Snapshot, int] = {}
         self._complete_update_status: dict[str, bool] = {}
@@ -143,15 +141,13 @@ class DagsterSQLMeshEventHandler:
         models_map: dict[str, Model],
         dag: DAG[t.Any],
         prefix: str,
-        translator: SQLMeshDagsterTranslator,
         is_testing: bool = False,
     ) -> None:
         self._models_map = models_map
         self._prefix = prefix
         self._context = context
         self._logger = context.log
-        self.translator = translator
-        self._tracker = MaterializationTracker(sorted_dag=dag.sorted[:], logger=self._logger, translator=self.translator)
+        self._tracker = MaterializationTracker(sorted_dag=dag.sorted[:], logger=self._logger)
         self._stage = "plan"
         self._errors: list[Exception] = []
         self._is_testing = is_testing
@@ -177,7 +173,7 @@ class DagsterSQLMeshEventHandler:
             # We allow selecting models. That value is mapped to models_map.
             # If the model is not in models_map, we can skip any notification
             if model:
-                # Passing model.fqn to translator
+                # Passing model.fqn to get internal unique asset key
                 output_key = get_asset_key_str(model.fqn)
                 if not self._is_testing:
                     # Stupidly dagster when testing cannot use the following
@@ -316,7 +312,6 @@ class SQLMeshResource(ConfigurableResource):
         context: AssetExecutionContext,
         *,
         context_factory: ContextFactory[ContextCls] = DEFAULT_CONTEXT_FACTORY,
-        translator: SQLMeshDagsterTranslator = SQLMeshDagsterTranslator(),
         environment: str = "dev",
         start: TimeLike | None = None,
         end: TimeLike | None = None,
@@ -335,8 +330,7 @@ class SQLMeshResource(ConfigurableResource):
 
         controller = self.get_controller(
             context_factory=context_factory,
-            log_override=logger,
-            translator=translator
+            log_override=logger
         )
 
         with controller.instance(environment) as mesh:
@@ -348,7 +342,10 @@ class SQLMeshResource(ConfigurableResource):
                 [model.fqn for model, _ in mesh.non_external_models_dag()]
             )
             selected_models_set, models_map, select_models = (
-                self._get_selected_models_from_context(context, models, translator)
+                self._get_selected_models_from_context(
+                    context=context,
+                    models=models
+                )
             )
 
             if all_available_models == selected_models_set or select_models is None:
@@ -362,7 +359,7 @@ class SQLMeshResource(ConfigurableResource):
 
             event_handler = DagsterSQLMeshEventHandler(
                 context=context, models_map=models_map, dag=dag,
-                prefix="sqlmesh: ", translator=translator, is_testing=self.is_testing
+                prefix="sqlmesh: ", is_testing=self.is_testing
             )
 
             try:
@@ -391,8 +388,7 @@ class SQLMeshResource(ConfigurableResource):
             yield from event_handler.notify_success(mesh.context)
 
     def _get_selected_models_from_context(
-        self, context: AssetExecutionContext, models: MappingProxyType[str, Model],
-        translator: SQLMeshDagsterTranslator
+        self, context: AssetExecutionContext, models: MappingProxyType[str, Model]
     ) -> tuple[set[str], dict[str, Model], list[str] | None]:
         models_map = models.copy()
         try:
@@ -421,7 +417,6 @@ class SQLMeshResource(ConfigurableResource):
     def get_controller(
         self,
         context_factory: ContextFactory[ContextCls],
-        translator: SQLMeshDagsterTranslator,
         log_override: logging.Logger | None = None,
     ) -> DagsterSQLMeshController[ContextCls]:
         return DagsterSQLMeshController.setup_with_config(
