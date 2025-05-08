@@ -2,7 +2,7 @@ import logging
 
 import polars
 
-from .testing import SQLMeshTestContext
+from dagster_sqlmesh.testing import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
 

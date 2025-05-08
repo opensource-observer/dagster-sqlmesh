@@ -21,7 +21,7 @@ DUCKDB_PATH = os.path.join(CURR_DIR, "../../db.db")
 sqlmesh_config = SQLMeshContextConfig(path=SQLMESH_PROJECT_PATH, gateway="local")
 
 
-@asset
+@asset(key=["db", "sources", "reset_asset"])
 def reset_asset() -> MaterializeResult:
     """An asset used for testing this entire workflow. If the duckdb database is
     found, this will delete it. This allows us to continously test this dag if
@@ -34,7 +34,7 @@ def reset_asset() -> MaterializeResult:
     return MaterializeResult(metadata={"deleted": deleted})
 
 
-@asset(deps=[reset_asset])
+@asset(deps=[reset_asset], key=["db", "sources", "test_source"])
 def test_source() -> pl.DataFrame:
     """Sets up the `test_source` table in duckdb that one of the sample sqlmesh
     models depends on"""
