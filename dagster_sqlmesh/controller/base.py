@@ -13,8 +13,8 @@ from sqlmesh.core.plan import PlanBuilder
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 
-from ..config import SQLMeshContextConfig
-from ..console import (
+from dagster_sqlmesh.config import SQLMeshContextConfig
+from dagster_sqlmesh.console import (
     ConsoleEvent,
     ConsoleEventHandler,
     ConsoleException,
@@ -22,7 +22,7 @@ from ..console import (
     Plan,
     SnapshotCategorizer,
 )
-from ..events import ConsoleGenerator
+from dagster_sqlmesh.events import ConsoleGenerator
 
 logger = logging.getLogger(__name__)
 

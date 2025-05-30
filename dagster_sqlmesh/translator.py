@@ -1,5 +1,5 @@
+from collections.abc import Sequence
 
-import sqlglot
 from dagster import AssetKey
 from sqlglot import exp
 from sqlmesh.core.context import Context
@@ -9,19 +9,20 @@ from sqlmesh.core.model import Model
 class SQLMeshDagsterTranslator:
     """Translates sqlmesh objects for dagster"""
 
-    def get_asset_key_from_model(self, context: Context, model: Model) -> AssetKey:
+    def get_asset_key(self, context: Context, fqn: str) -> AssetKey:
         """Given the sqlmesh context and a model return the asset key"""
-        return AssetKey(model.view_name)
+        path = self.get_asset_key_name(fqn)
+        return AssetKey(path)
 
-    def get_asset_key_fqn(self, context: Context, fqn: str) -> AssetKey:
-        """Given the sqlmesh context and a fqn of a model return an asset key"""
-        table = self.get_fqn_to_table(context, fqn)
-        return AssetKey(table.name)
+    def get_asset_key_name(self, fqn: str) -> Sequence[str]:
+        table = exp.to_table(fqn)
+        asset_key_name = [table.catalog, table.db, table.name]
 
-    def get_fqn_to_table(self, context: Context, fqn: str) -> exp.Table:
-        """Given the sqlmesh context and a fqn return the table"""
-        dialect = self._get_context_dialect(context)
-        return sqlglot.to_table(fqn, dialect=dialect)
+        return asset_key_name
+    
+    def get_group_name(self, context: Context, model: Model) -> str:
+        path = self.get_asset_key_name(model.fqn)
+        return path[-2]
 
     def _get_context_dialect(self, context: Context) -> str:
         return context.engine_adapter.dialect
