@@ -1,5 +1,9 @@
 # Changelog
 
+## <small>0.16.1 (2025-06-06)</small>
+
+* fix: fixes issues with not raising errors for runs and plans (#46) ([191b967](https://github.com/opensource-observer/oso/commit/191b967)), closes [#46](https://github.com/opensource-observer/oso/issues/46)
+
 ## 0.16.0 (2025-04-30)
 
 * feat: update sqlmesh pin to 0.178.2 (#45) ([27245d9](https://github.com/opensource-observer/oso/commit/27245d9)), closes [#45](https://github.com/opensource-observer/oso/issues/45)
