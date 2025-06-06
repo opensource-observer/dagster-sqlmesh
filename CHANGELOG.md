@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.0 (2025-06-06)
+
+* feat: not actually a feat but need to fix the releaser ([ce0d103](https://github.com/opensource-observer/oso/commit/ce0d103))
+
 ## <small>0.16.1 (2025-06-06)</small>
 
 * fix: fixes issues with not raising errors for runs and plans (#46) ([191b967](https://github.com/opensource-observer/oso/commit/191b967)), closes [#46](https://github.com/opensource-observer/oso/issues/46)
