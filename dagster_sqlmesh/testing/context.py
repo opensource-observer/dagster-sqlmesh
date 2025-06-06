@@ -17,7 +17,7 @@ from dagster_sqlmesh.config import SQLMeshContextConfig
 from dagster_sqlmesh.controller.base import PlanOptions, RunOptions
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 from dagster_sqlmesh.events import ConsoleRecorder
-from dagster_sqlmesh.resource import SQLMeshResource
+from dagster_sqlmesh.resource import DagsterSQLMeshEventHandler, SQLMeshResource
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,41 @@ def setup_testing_sqlmesh_test_context(
     return SQLMeshTestContext(db_path=db_path, context_config=context_config)
 
 
+class TestSQLMeshResource(SQLMeshResource):
+    """A test SQLMesh resource that can be used in tests.
+
+    This resource is a subclass of SQLMeshResource and is used to run SQLMesh in tests.
+    It allows for easy setup and teardown of the SQLMesh context.
+    """
+
+    def __init__(self, config: SQLMeshContextConfig, is_testing: bool = False):
+        super().__init__(config=config, is_testing=is_testing)
+        def default_event_handler_factory(*args: t.Any, **kwargs: t.Any) -> DagsterSQLMeshEventHandler:
+            """Default event handler factory for the SQLMesh resource."""
+            return DagsterSQLMeshEventHandler(*args, **kwargs)
+        self._event_handler_factory = default_event_handler_factory
+
+    def set_event_handler_factory(self, event_handler_factory: t.Callable[..., DagsterSQLMeshEventHandler]) -> None:
+        """Set the event handler for the SQLMesh resource.
+
+        Args:
+            event_handler (DagsterSQLMeshEventHandler): The event handler to set.
+        """
+        self._event_handler_factory = event_handler_factory
+
+    def create_event_handler(self, *args: t.Any, **kwargs: t.Any) -> DagsterSQLMeshEventHandler:
+        """Create a new event handler for the SQLMesh resource.
+
+        Args:
+            *args: Positional arguments to pass to the event handler.
+            **kwargs: Keyword arguments to pass to the event handler.
+
+        Returns:
+            DagsterSQLMeshEventHandler: The created event handler.
+        """
+        return self._event_handler_factory(*args, **kwargs)
+
+
 @dataclass
 class SQLMeshTestContext:
     """A test context for running SQLMesh"""
@@ -61,8 +96,8 @@ class SQLMeshTestContext:
             config=self.context_config, 
         )
 
-    def create_resource(self) -> SQLMeshResource:
-        return SQLMeshResource(
+    def create_resource(self) -> TestSQLMeshResource:
+        return TestSQLMeshResource(
             config=self.context_config, is_testing=True,
         )
 
