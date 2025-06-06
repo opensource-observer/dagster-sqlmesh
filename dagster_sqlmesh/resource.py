@@ -146,7 +146,9 @@ class DagsterSQLMeshEventHandler:
         self._prefix = prefix
         self._context = context
         self._logger = context.log
-        self._tracker = MaterializationTracker(sorted_dag=dag.sorted[:], logger=self._logger)
+        self._tracker = MaterializationTracker(
+            sorted_dag=dag.sorted[:], logger=self._logger
+        )
         self._stage = "plan"
         self._errors: list[Exception] = []
         self._is_testing = is_testing
@@ -328,8 +330,7 @@ class SQLMeshResource(ConfigurableResource):
         logger = context.log
 
         controller = self.get_controller(
-            context_factory=context_factory,
-            log_override=logger
+            context_factory=context_factory, log_override=logger
         )
 
         with controller.instance(environment) as mesh:
@@ -341,10 +342,7 @@ class SQLMeshResource(ConfigurableResource):
                 [model.fqn for model, _ in mesh.non_external_models_dag()]
             )
             selected_models_set, models_map, select_models = (
-                self._get_selected_models_from_context(
-                    context=context,
-                    models=models
-                )
+                self._get_selected_models_from_context(context=context, models=models)
             )
 
             if all_available_models == selected_models_set or select_models is None:
@@ -356,10 +354,31 @@ class SQLMeshResource(ConfigurableResource):
             else:
                 logger.info(f"selected models: {select_models}")
 
-            event_handler = DagsterSQLMeshEventHandler(
-                context=context, models_map=models_map, dag=dag,
-                prefix="sqlmesh: ", is_testing=self.is_testing
+            event_handler = self.create_event_handler(
+                context=context,
+                models_map=models_map,
+                dag=dag,
+                prefix="sqlmesh: ",
+                is_testing=self.is_testing,
             )
+
+            def raise_for_sqlmesh_errors(
+                event_handler: DagsterSQLMeshEventHandler,
+                additional_errors: list[Exception] | None = None,
+            ) -> None:
+                additional_errors = additional_errors or []
+                errors = event_handler.errors
+                if len(errors) + len(additional_errors) == 0:
+                    return
+                for error in errors:
+                    logger.error(
+                        f"sqlmesh encountered the following error during sqlmesh {event_handler.stage}: {error}"
+                    )
+                raise PlanOrRunFailedError(
+                    event_handler.stage,
+                    f"sqlmesh failed during {event_handler.stage} with {len(event_handler.errors) + 1} errors",
+                    [*errors, *additional_errors],
+                )
 
             try:
                 for event in mesh.plan_and_run(
@@ -376,15 +395,29 @@ class SQLMeshResource(ConfigurableResource):
                     event_handler.process_events(event)
             except SQLMeshError as e:
                 logger.error(f"sqlmesh error: {e}")
-                errors = event_handler.errors
-                for error in errors:
-                    logger.error(f"sqlmesh encountered the following error during sqlmesh {event_handler.stage}: {error}")
-                raise PlanOrRunFailedError(
-                    event_handler.stage,
-                    f"sqlmesh failed during {event_handler.stage} with {len(event_handler.errors) + 1} errors",
-                    [e, *event_handler.errors],
-                )
+                raise_for_sqlmesh_errors(event_handler, [GenericSQLMeshError(str(e))])
+            # Some errors do not raise exceptions immediately, so we need to check
+            # the event handler for any errors that may have been collected.
+            raise_for_sqlmesh_errors(event_handler)
+
             yield from event_handler.notify_success(mesh.context)
+
+    def create_event_handler(
+        self,
+        *,
+        context: AssetExecutionContext,
+        dag: DAG[str],
+        models_map: dict[str, Model],
+        prefix: str,
+        is_testing: bool,
+    ) -> DagsterSQLMeshEventHandler:
+        return DagsterSQLMeshEventHandler(
+            context=context,
+            dag=dag,
+            models_map=models_map,
+            prefix=prefix,
+            is_testing=is_testing,
+        )
 
     def _get_selected_models_from_context(
         self, context: AssetExecutionContext, models: MappingProxyType[str, Model]
@@ -421,5 +454,5 @@ class SQLMeshResource(ConfigurableResource):
         return DagsterSQLMeshController.setup_with_config(
             config=self.config,
             context_factory=context_factory,
-            log_override=log_override
+            log_override=log_override,
         )
