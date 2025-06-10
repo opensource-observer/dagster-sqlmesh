@@ -30,7 +30,7 @@
   },
   "hooks": {
     "before:init": ["rm -rf dist"],
-    "before:release": "uv sync",
+    "before:release": "uv sync --upgrade",
     "after:release": "uv build && uv publish"
   }
 }
