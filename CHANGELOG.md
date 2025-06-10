@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.0 (2025-06-10)
+
+* feat: upgrade to sqlmesh 0.187.x (#47) ([94fe17e](https://github.com/opensource-observer/oso/commit/94fe17e)), closes [#47](https://github.com/opensource-observer/oso/issues/47)
+
 ## 0.17.0 (2025-06-06)
 
 * feat: not actually a feat but need to fix the releaser ([ce0d103](https://github.com/opensource-observer/oso/commit/ce0d103))
