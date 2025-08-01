@@ -10,6 +10,7 @@ from dagster_sqlmesh.controller import (
     ContextFactory,
     DagsterSQLMeshController,
 )
+from dagster_sqlmesh.controller.dagster import DagsterSQLMeshCacheOptions
 from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
 
 logger = logging.getLogger(__name__)
@@ -29,11 +30,19 @@ def sqlmesh_assets(
     retry_policy: RetryPolicy | None = None,
     # For now we don't set this by default
     enabled_subsetting: bool = False,
+    cache_options: DagsterSQLMeshCacheOptions | None = None,
 ) -> t.Callable[[t.Callable[..., t.Any]], AssetsDefinition]:
-    controller = DagsterSQLMeshController.setup_with_config(config=config, context_factory=context_factory)
+    controller = DagsterSQLMeshController.setup_with_config(
+        config=config, context_factory=context_factory
+    )
     if not dagster_sqlmesh_translator:
         dagster_sqlmesh_translator = SQLMeshDagsterTranslator()
-    conversion = controller.to_asset_outs(environment, translator=dagster_sqlmesh_translator)
+
+    conversion = controller.to_asset_outs(
+        environment,
+        translator=dagster_sqlmesh_translator,
+        cache_options=cache_options,
+    )
 
     return multi_asset(
         name=name,
