@@ -16,7 +16,13 @@ from dagster_sqlmesh.controller.base import (
     SQLMeshInstance,
 )
 from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
-from dagster_sqlmesh.types import SQLMeshModelDep, SQLMeshMultiAssetOptions
+from dagster_sqlmesh.types import (
+    ConvertibleToAssetDep,
+    ConvertibleToAssetKey,
+    ConvertibleToAssetOut,
+    SQLMeshModelDep,
+    SQLMeshMultiAssetOptions,
+)
 from dagster_sqlmesh.utils import get_asset_key_str
 
 logger = logging.getLogger(__name__)
@@ -129,7 +135,7 @@ class DagsterSQLMeshCacheOptions(BaseModel):
     cache_dir: str = ""
     cache_filename: str = "dagster_sqlmesh_cache.jsonl"
     enable_ttl: bool = True
-    ttl_seconds: int = 60 * 5 # Defaults to 5 minutes
+    ttl_seconds: int = 60 * 5  # Defaults to 5 minutes
 
     @model_validator(mode="after")
     def validate_cache_dir(self):
@@ -140,7 +146,6 @@ class DagsterSQLMeshCacheOptions(BaseModel):
         if not self.cache_dir:
             raise ValueError("cache_dir must be set")
         return self
-
 
     def cache_path(self, environment: str) -> str:
         """Returns the full path to the cache file"""
@@ -162,6 +167,7 @@ class CacheableAssetStreamer(t.Protocol):
         """Stream the cache file if it exists and is valid"""
         ...
 
+
 class CacheableAssetCacheWriter(t.Protocol):
     """Protocol for consuming SQLMesh assets from a cache"""
 
@@ -173,6 +179,7 @@ class CacheableAssetCacheWriter(t.Protocol):
         """Clear the cache to prepare for writing"""
         ...
 
+
 class DummyCacheableAssetWriter(CacheableAssetCacheWriter):
     """A dummy cache writer that does nothing"""
 
@@ -183,6 +190,7 @@ class DummyCacheableAssetWriter(CacheableAssetCacheWriter):
     def start_cache(self) -> None:
         """Does nothing"""
         pass
+
 
 @dataclass(kw_only=True)
 class DagsterSQLMeshCache:
@@ -288,17 +296,19 @@ class SQLMeshInstanceAssetStreamer:
             model_key = get_asset_key_str(model.fqn)
             # If current Dagster supports "kinds", add labels for Dagster UI
             if "kinds" in signature(AssetOut).parameters:
-                yield CacheEntry(payload=CachedAssetOut(
-                    model_key=model_key,
-                    asset_key=asset_key.to_user_string(),
-                    tags=asset_tags,
-                    is_required=False,
-                    group_name=translator.get_group_name(context, model),
-                    kinds={
-                        "sqlmesh",
-                        translator._get_context_dialect(context).lower(),
-                    },
-                ))
+                yield CacheEntry(
+                    payload=CachedAssetOut(
+                        model_key=model_key,
+                        asset_key=asset_key.to_user_string(),
+                        tags=asset_tags,
+                        is_required=False,
+                        group_name=translator.get_group_name(context, model),
+                        kinds={
+                            "sqlmesh",
+                            translator.get_context_dialect(context).lower(),
+                        },
+                    )
+                )
             internal_asset_deps_map[model_key] = internal_asset_deps
 
         yield CacheEntry(
@@ -315,61 +325,68 @@ class SQLMeshInstanceAssetStreamer:
 class DagsterSQLMeshController(SQLMeshController[ContextCls]):
     """An extension of the sqlmesh controller specifically for dagster use"""
 
-    def to_asset_outs_from_streamer(
-        self,
-        streamer: CacheableAssetStreamer,
-        cache_writer: CacheableAssetCacheWriter,
-    ) -> SQLMeshMultiAssetOptions:
-        """Read the cache file and return the SQLMeshMultiAssetOptions"""
-        output = SQLMeshMultiAssetOptions()
-        cache_writer.start_cache()
-
-        for entry in streamer.stream_assets():
-            payload = entry.payload
-            match payload:
-                case CachedAssetOut():
-                    asset_out = payload.to_asset_out()
-                    output.outs[payload.model_key] = asset_out
-                case CachedInternalAssetDeps():
-                    output.internal_asset_deps = payload.to_internal_asset_deps()
-                case CachedDeps():
-                    output.deps = payload.to_deps()
-                case CachedMetadata():
-                    continue
-            cache_writer.append_to_cache(entry)
-        return output
-
     def to_asset_outs(
         self,
         environment: str,
         translator: SQLMeshDagsterTranslator,
-        cache_options: DagsterSQLMeshCacheOptions | None = None,
     ) -> SQLMeshMultiAssetOptions:
         """Loads all the asset outs of the current sqlmesh environment. If a
         cache is provided, it will be tried first to load the asset outs."""
 
-        cache_options = cache_options or DagsterSQLMeshCacheOptions(
-            enabled=False,
-        )
+        internal_asset_deps_map: dict[str, set[ConvertibleToAssetKey]] = {}
+        deps_map: dict[str, ConvertibleToAssetDep] = {}
+        asset_outs: dict[str, ConvertibleToAssetOut] = {}
 
-        cache_writer: CacheableAssetCacheWriter = DummyCacheableAssetWriter()
-        if cache_options.enabled:
-            cache_streamer = cache_options.asset_streamer(environment)
-
-            if cache_streamer.is_valid:
-                logger.info(
-                    f"Using cache for environment {environment} at {cache_streamer.cache_path}"
-                )
-                return self.to_asset_outs_from_streamer(cache_streamer, cache_writer)
-            else:
-                logger.info(
-                    f"Cache for environment {environment} is invalid or does not exist. Rebuilding assets."
-                )
-                # Set the cache writer to be the cache_streamer as opposed to
-                # the dummy so it can write to the cache
-                cache_writer = cache_streamer
-        
         with self.instance(environment, "to_asset_outs") as instance:
-            # If no valid cache, use the SQLMesh instance to stream assets 
-            cache_streamer = SQLMeshInstanceAssetStreamer(instance=instance, translator=translator)
-            return self.to_asset_outs_from_streamer(cache_streamer, cache_writer)
+            context = instance.context
+
+            for model, deps in instance.non_external_models_dag():
+                asset_key = translator.get_asset_key(context=context, fqn=model.fqn)
+                asset_key_str = asset_key.to_user_string()
+                model_deps = [
+                    SQLMeshModelDep(fqn=dep, model=context.get_model(dep))
+                    for dep in deps
+                ]
+                internal_asset_deps: set[ConvertibleToAssetKey] = set()
+                asset_tags = translator.get_tags(context, model)
+
+                for dep in model_deps:
+                    if dep.model:
+                        dep_asset_key_str = translator.get_asset_key(
+                            context, dep.model.fqn
+                        ).to_user_string()
+
+                        internal_asset_deps.add(
+                            translator.create_asset_key(key=dep_asset_key_str)
+                        )
+                    else:
+                        table = get_asset_key_str(dep.fqn)
+                        key = translator.get_asset_key(
+                            context, dep.fqn
+                        ).to_user_string()
+                        internal_asset_deps.add(translator.create_asset_key(key=key))
+
+                        # create an external dep
+                        deps_map[table] = translator.create_asset_dep(key=key)
+
+                model_key = get_asset_key_str(model.fqn)
+                asset_outs[model_key] = translator.create_asset_out(
+                    model_key=model_key,
+                    asset_key=asset_key_str,
+                    tags=asset_tags,
+                    is_required=False,
+                    group_name=translator.get_group_name(context, model),
+                    kinds={
+                        "sqlmesh",
+                        translator.get_context_dialect(context).lower(),
+                    },
+                )
+                internal_asset_deps_map[model_key] = internal_asset_deps
+
+            deps = list(deps_map.values())
+
+            return SQLMeshMultiAssetOptions(
+                outs=asset_outs,
+                deps=deps,
+                internal_asset_deps=internal_asset_deps_map,
+            )
