@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.0 (2025-08-08)
+
+* feat: introduce dagster sqlmesh cache (#48) ([fa52373](https://github.com/opensource-observer/oso/commit/fa52373)), closes [#48](https://github.com/opensource-observer/oso/issues/48)
+
 ## 0.18.0 (2025-06-10)
 
 * feat: upgrade to sqlmesh 0.187.x (#47) ([94fe17e](https://github.com/opensource-observer/oso/commit/94fe17e)), closes [#47](https://github.com/opensource-observer/oso/issues/47)
