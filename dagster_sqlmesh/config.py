@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from dagster import Config
 from pydantic import Field
 from sqlmesh.core.config import Config as MeshConfig
+from sqlmesh.core.config.loader import load_configs
 
 
 @dataclass
@@ -27,7 +29,11 @@ class SQLMeshContextConfig(Config):
     config_override: dict[str, Any] | None = Field(default_factory=lambda: None)
 
     @property
-    def sqlmesh_config(self) -> MeshConfig | None:
+    def sqlmesh_config(self) -> MeshConfig:
         if self.config_override:
             return MeshConfig.parse_obj(self.config_override)
-        return None
+        sqlmesh_path = Path(self.path)
+        configs = load_configs(None, MeshConfig, [sqlmesh_path])
+        if sqlmesh_path not in configs:
+            raise ValueError(f"SQLMesh configuration not found at {sqlmesh_path}")
+        return configs[sqlmesh_path]
