@@ -3,44 +3,45 @@ from collections.abc import Sequence
 from inspect import signature
 
 from dagster import AssetDep, AssetKey, AssetOut
+from pydantic import BaseModel, Field
 from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 
-from .types import ConvertibleToAssetDep, ConvertibleToAssetKey, ConvertibleToAssetOut
+from .types import ConvertibleToAssetDep, ConvertibleToAssetOut
 
 
-class _IntermediateAssetOut:
-    def __init__(self, *, model_key: str, asset_key: str, **kwargs: t.Any):
-        self.model_key = model_key
-        self.asset_key = asset_key
-        self.kwargs = kwargs
+class IntermediateAssetOut(BaseModel):
+    model_key: str
+    asset_key: str
+    tags: t.Mapping[str, str] | None = None
+    is_required: bool = True
+    group_name: str | None = None
+    kinds: set[str] | None = None
+    kwargs: dict[str, t.Any] = Field(default_factory=dict)
 
     def to_asset_out(self) -> AssetOut:
-        kwargs = self.kwargs.copy()
-
         asset_key = AssetKey.from_user_string(self.asset_key)
 
         if "kinds" not in signature(AssetOut).parameters:
-            kwargs.pop("kinds", None)
+            self.kinds = None
 
-        return AssetOut(asset_key=asset_key, **self.kwargs)
+        return AssetOut(
+            key=asset_key,
+            tags=self.tags,
+            is_required=self.is_required,
+            group_name=self.group_name,
+            kinds=self.kinds,
+            **self.kwargs,
+        )
 
 
-class _IntermediateAssetDep:
-    def __init__(self, *, key: str):
-        self.key = key
+class IntermediateAssetDep(BaseModel):
+    key: str
+    kwargs: dict[str, t.Any] = Field(default_factory=dict)
 
     def to_asset_dep(self) -> AssetDep:
         return AssetDep(AssetKey.from_user_string(self.key))
-
-
-class _IntermediateAssetKey:
-    def __init__(self, *, key: str):
-        self.key = key
-
-    def to_asset_key(self) -> AssetKey:
-        return AssetKey.from_user_string(self.key)
 
 
 class SQLMeshDagsterTranslator:
@@ -70,7 +71,7 @@ class SQLMeshDagsterTranslator:
         Most users of this library will not need to use this method, it is
         primarily the way we enable cacheable assets from dagster-sqlmesh.
         """
-        return _IntermediateAssetDep(key=key, **kwargs)
+        return IntermediateAssetDep(key=key, kwargs=kwargs)
 
     def create_asset_out(
         self, *, model_key: str, asset_key: str, **kwargs: t.Any
@@ -80,15 +81,15 @@ class SQLMeshDagsterTranslator:
         Most users of this library will not need to use this method, it is
         primarily the way we enable cacheable assets from dagster-sqlmesh.
         """
-        return _IntermediateAssetOut(model_key=model_key, asset_key=asset_key, **kwargs)
-
-    def create_asset_key(self, **kwargs: t.Any) -> ConvertibleToAssetKey:
-        """Create an object that resolves to an AssetKey
-
-        Most users of this library will not need to use this method, it is
-        primarily the way we enable cacheable assets from dagster-sqlmesh.
-        """
-        return _IntermediateAssetKey(**kwargs)
+        return IntermediateAssetOut(
+            model_key=model_key,
+            asset_key=asset_key,
+            kinds=kwargs.pop("kinds", None),
+            tags=kwargs.pop("tags", None),
+            group_name=kwargs.pop("group_name", None),
+            is_required=kwargs.pop("is_required", False),
+            kwargs=kwargs,
+        )
 
     def get_tags(self, context: Context, model: Model) -> dict[str, str]:
         """Given the sqlmesh context and a model return the tags for that model"""

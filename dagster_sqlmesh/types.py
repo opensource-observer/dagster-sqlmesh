@@ -52,9 +52,9 @@ class SQLMeshMultiAssetOptions:
     useful in caching purposes and is done to allow for users of this library to
     manipulate the dagster asset creation process as they see fit."""
 
-    outs: dict[str, ConvertibleToAssetOut] = field(default_factory=lambda: {})
-    deps: t.Iterable[ConvertibleToAssetDep] = field(default_factory=lambda: {})
-    internal_asset_deps: dict[str, set[ConvertibleToAssetKey]] = field(default_factory=lambda: {})
+    outs: t.Mapping[str, ConvertibleToAssetOut] = field(default_factory=lambda: {})
+    deps: t.Iterable[ConvertibleToAssetDep] = field(default_factory=lambda: [])
+    internal_asset_deps: t.Mapping[str, set[str]] = field(default_factory=lambda: {})
 
     def to_asset_outs(self) -> t.Mapping[str, AssetOut]:
         """Convert to an iterable of AssetOut objects."""
@@ -67,6 +67,6 @@ class SQLMeshMultiAssetOptions:
     def to_internal_asset_deps(self) -> dict[str, set[AssetKey]]:
         """Convert to a dictionary of internal asset dependencies."""
         return {
-            key: {dep.to_asset_key() for dep in deps}
+            key: {AssetKey.from_user_string(dep) for dep in deps}
             for key, deps in self.internal_asset_deps.items()
         }

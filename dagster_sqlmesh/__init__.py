@@ -4,3 +4,4 @@ from .asset import *
 from .config import *
 from .controller import *
 from .resource import *
+from .translator import *

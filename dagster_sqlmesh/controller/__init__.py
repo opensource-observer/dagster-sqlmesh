@@ -8,4 +8,4 @@ from .base import (
     SQLMeshController,
     SQLMeshInstance,
 )
-from .dagster import DagsterSQLMeshCacheOptions, DagsterSQLMeshController
+from .dagster import DagsterSQLMeshController
