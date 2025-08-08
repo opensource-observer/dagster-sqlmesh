@@ -21,7 +21,6 @@ from dagster_sqlmesh import (
     SQLMeshResource,
     sqlmesh_assets,
 )
-from dagster_sqlmesh.controller import DagsterSQLMeshCacheOptions
 
 CURR_DIR = os.path.dirname(__file__)
 SQLMESH_PROJECT_PATH = os.path.abspath(os.path.join(CURR_DIR, "../sqlmesh_project"))
@@ -103,9 +102,6 @@ def post_full_model() -> pl.DataFrame:
     config=sqlmesh_config,
     enabled_subsetting=True,
     dagster_sqlmesh_translator=RewrittenSQLMeshTranslator(),
-    cache_options=DagsterSQLMeshCacheOptions(
-        enabled=True, cache_dir=SQLMESH_CACHE_PATH
-    ),
 )
 def sqlmesh_project(
     context: AssetExecutionContext, sqlmesh: SQLMeshResource
