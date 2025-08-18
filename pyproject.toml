@@ -13,6 +13,7 @@ dependencies = [
     "sqlmesh<0.188",
     "pytest>=8.3.2",
     "pyarrow>=18.0.0",
+    "pydantic>=2.11.5",
 ]
 
 [dependency-groups]
