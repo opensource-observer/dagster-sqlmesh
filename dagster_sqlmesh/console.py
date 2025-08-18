@@ -10,7 +10,7 @@ from sqlglot.expressions import Alter
 from sqlmesh.core.console import Console
 from sqlmesh.core.context_diff import ContextDiff
 from sqlmesh.core.environment import EnvironmentNamingInfo
-from sqlmesh.core.plan import EvaluatablePlan, PlanBuilder
+from sqlmesh.core.plan import EvaluatablePlan, Plan as SQLMeshPlan, PlanBuilder
 from sqlmesh.core.snapshot import Snapshot, SnapshotChangeCategory, SnapshotInfoLike
 from sqlmesh.core.table_diff import RowDiff, SchemaDiff, TableDiff
 from sqlmesh.utils.concurrency import NodeExecutionFailedError
@@ -219,6 +219,10 @@ class PrintEnvironments(BaseConsoleEvent):
 class ShowTableDiffSummary(BaseConsoleEvent):
     table_diff: TableDiff
 
+@dataclass(kw_only=True)
+class PlanBuilt(BaseConsoleEvent):
+    plan: SQLMeshPlan 
+
 ConsoleEvent = (
     StartPlanEvaluation
     | StopPlanEvaluation
@@ -263,6 +267,7 @@ ConsoleEvent = (
     | ConsoleException
     | PrintEnvironments
     | ShowTableDiffSummary
+    | PlanBuilt
 )
 
 ConsoleEventHandler = t.Callable[[ConsoleEvent], None]
@@ -424,7 +429,22 @@ class IntrospectingConsole(Console):
 
     def remove_handler(self, handler_id: str) -> None:
         del self._handlers[handler_id]
-                 
+
+    def plan(self, plan_builder: PlanBuilder, auto_apply: bool, default_catalog: str | None, no_diff: bool = False, no_prompts: bool = False) -> None:
+        """Plan is not a console event. This triggers building of a plan and
+        applying said plan
+
+        This method is called by SQLMesh to start the plan process (when you
+        call Context#plan)
+
+        This overriden method ignores the options passed in at this time
+        """
+
+        plan_builder.apply()
+
+    def capture_built_plan(self, plan: SQLMeshPlan) -> None:
+        """Capture the built plan and publish a PlanBuilt event."""
+        self.publish(PlanBuilt(plan=plan))
 
 class EventConsole(IntrospectingConsole):
     """

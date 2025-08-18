@@ -1,16 +1,17 @@
 import logging
 import typing as t
+from datetime import UTC, datetime
 from types import MappingProxyType
 
-from dagster import (
-    AssetExecutionContext,
-    ConfigurableResource,
-    MaterializeResult,
-)
+import dagster as dg
+import sqlglot
 from dagster._core.errors import DagsterInvalidPropertyError
+from pydantic import BaseModel, Field
+from sqlglot import exp
 from sqlmesh import Model
 from sqlmesh.core.context import Context as SQLMeshContext
-from sqlmesh.core.snapshot import Snapshot, SnapshotInfoLike, SnapshotTableInfo
+from sqlmesh.core.plan import Plan as SQLMeshPlan
+from sqlmesh.core.snapshot import Snapshot, SnapshotInfoLike
 from sqlmesh.utils.dag import DAG
 from sqlmesh.utils.date import TimeLike
 from sqlmesh.utils.errors import SQLMeshError
@@ -26,6 +27,118 @@ from dagster_sqlmesh.controller.base import (
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
 from dagster_sqlmesh.utils import get_asset_key_str
 
+logger = logging.getLogger(__name__)
+
+def _START_OF_UNIX_TIME():
+    dt = datetime.strptime(
+        "1970-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"
+    )
+    return dt.astimezone(UTC)
+
+
+class ModelMaterializationStatus(BaseModel):
+    model_fqn: str
+
+    # The last time this model was updated or restated
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    snapshot_id: str
+
+    last_updated_or_restated: datetime = Field(default_factory=_START_OF_UNIX_TIME)
+    last_promoted: datetime = Field(default_factory=_START_OF_UNIX_TIME)
+    last_backfill: datetime = Field(default_factory=_START_OF_UNIX_TIME)
+
+    def update_or_restate_now(self):
+        """Shortcut function to set last_updated_or_restated time to now"""
+        self.last_updated_or_restated = datetime.now(UTC)
+
+    def promote_now(self):
+        """Shortcut function to set last_promoted time to now"""
+        self.last_promoted = datetime.now(UTC)
+
+    def backfill_now(self):
+        """Shortcut function to set last_backfill time to now"""
+        self.last_backfill = datetime.now(UTC)
+
+    def as_dagster_metadata(
+        self, previous: "ModelMaterializationStatus | None"
+    ) -> dict[str, dg.MetadataValue]:
+        if previous:
+            # if the previous materialization status exists then we compare all
+            # of the dates and take the _largest_ for all dates except
+            # `created_at`
+            last_updated_or_restated = dg.MetadataValue.timestamp(
+                max(previous.last_updated_or_restated, self.last_updated_or_restated)
+            )
+            last_promoted = dg.MetadataValue.timestamp(
+                max(previous.last_promoted, self.last_promoted)
+            )
+            last_backfill = dg.MetadataValue.timestamp(max(previous.last_backfill, self.last_backfill))
+            created_at = dg.MetadataValue.timestamp(previous.created_at)
+        else:
+            # If there is no previous materialization status all dates can use
+            # the created_at timestamp
+            created_at = dg.MetadataValue.timestamp(self.created_at)
+            last_updated_or_restated = dg.MetadataValue.timestamp(self.created_at)
+            last_promoted = dg.MetadataValue.timestamp(self.created_at)
+            last_backfill = dg.MetadataValue.timestamp(self.created_at)
+
+        return {
+            "snapshot_id": dg.MetadataValue.text(self.snapshot_id),
+            "model_fqn": dg.MetadataValue.text(self.model_fqn),
+            "created_at": created_at,
+            "last_updated_or_restated": last_updated_or_restated,
+            "last_promoted": last_promoted,
+            "last_backfill": last_backfill,
+        }
+
+    @classmethod
+    def from_dagster_metadata(
+        cls, metadata: dict[str, t.Any]
+    ) -> "ModelMaterializationStatus":
+        # convert metadata values
+        converted: dict[str, dg.MetadataValue] = {}
+        for key, value in metadata.items():
+            assert isinstance(value, dg.MetadataValue), f"Expected MetadataValue for {key}, got {type(value)}"
+            converted[key] = value
+
+        return cls.model_validate(dict(
+            model_fqn=converted["model_fqn"].value,
+            snapshot_id=converted["snapshot_id"].value,
+            created_at=converted["created_at"].value,
+            last_updated_or_restated=converted["last_updated_or_restated"].value,
+            last_promoted=converted["last_promoted"].value,
+            last_backfill=converted["last_backfill"].value,
+        ))
+    
+    def as_glot_table(self) -> exp.Table:
+        return sqlglot.to_table(self.model_fqn)
+    
+    def is_match(self, input: str, ignore_catalog: bool = False) -> bool:
+        """Tests if the passed in string matches this model's table
+
+        Args:
+            input (str): The input string to match against the model's table.
+            ignore_catalog (bool): Whether to use to only match table db and
+            name (default: False)
+
+        Returns:
+            bool - True if the input string matches the model's table, False
+            otherwise.
+        """
+        table = self.as_glot_table()
+
+        input_as_table = sqlglot.to_table(input)
+
+        if input_as_table.name != table.name:
+            return False
+        if input_as_table.db != table.db:
+            return False
+        
+        if not ignore_catalog:
+            if input_as_table.catalog != table.catalog:
+                return False
+        return True
+
 
 class MaterializationTracker:
     """Tracks sqlmesh materializations and notifies dagster in the correct
@@ -36,24 +149,71 @@ class MaterializationTracker:
         self.logger = logger
         self._batches: dict[Snapshot, int] = {}
         self._count: dict[Snapshot, int] = {}
-        self._complete_update_status: dict[str, bool] = {}
+        self._model_metadata: dict[str, ModelMaterializationStatus] = {}
+        self._non_model_names: set[str] = set()
         self._sorted_dag = sorted_dag
         self._current_index = 0
         self.finished_promotion = False
 
-    def init_complete_update_status(self, snapshots: list[SnapshotTableInfo]) -> None:
-        planned_model_names = set()
-        for snapshot in snapshots:
-            planned_model_names.add(snapshot.name)
-
-        # Anything not in the plan should be listed as completed and queued for
-        # notification
-        self._complete_update_status = {
-            name: False for name in (set(self._sorted_dag) - planned_model_names)
+    def initialize_from_plan(self, plan: SQLMeshPlan):
+        # Initialize all of the model materialization statuses
+        # Existing snapshots
+        snapshots_by_name = {
+            snapshot.name: snapshot for snapshot in plan.snapshots.values()
         }
 
+        created_at = datetime.now(UTC)
+
+        # Include new snapshots
+        for snapshot in plan.context_diff.new_snapshots.values():
+            snapshots_by_name[snapshot.name] = snapshot
+
+        for model_fqn in self._sorted_dag:
+            snapshot = snapshots_by_name.get(model_fqn)
+
+            if not snapshot:
+                self._non_model_names.add(model_fqn)
+                continue
+
+            if snapshot.is_external:
+                self._non_model_names.add(model_fqn)
+                continue
+
+            self._model_metadata[snapshot.name] = ModelMaterializationStatus(
+                model_fqn=snapshot.model.fqn,
+                snapshot_id=snapshot.identifier,
+                created_at=created_at,
+            )
+
+        self.logger.debug(f"non_models: {self._non_model_names}")
+        self.logger.debug(f"snapshots_by_name: {snapshots_by_name.keys()}")
+
+        # Update all of the model status that are to be updated or restated in this plan
+        # This condition was taken from a condition found in sqlmesh's `Context`
+        # object
+        if (
+            not plan.context_diff.has_changes
+            and not plan.requires_backfill
+            and not plan.has_unmodified_unpromoted
+        ):
+            self.logger.info("No changes detected, adding all models to the queue")
+        else:
+            context_diff = plan.context_diff
+            for snapshot in context_diff.new_snapshots.values():
+                self._model_metadata[snapshot.name].update_or_restate_now()
+            for snapshots in context_diff.modified_snapshots.values():
+                self._model_metadata[snapshots[0].name].update_or_restate_now()
+            for snapshot_id in plan.restatements.keys():
+                self._model_metadata[
+                    plan.snapshots[snapshot_id].name
+                ].update_or_restate_now()
+
     def update_promotion(self, snapshot: SnapshotInfoLike, promoted: bool) -> None:
-        self._complete_update_status[snapshot.name] = promoted
+        if promoted:
+            self._model_metadata[snapshot.name].promote_now()
+
+    def update_run(self, snapshot: SnapshotInfoLike) -> None:
+        self._model_metadata[snapshot.name].backfill_now()
 
     def stop_promotion(self) -> None:
         self.finished_promotion = True
@@ -64,6 +224,7 @@ class MaterializationTracker:
 
         for snapshot, _ in self._batches.items():
             self._count[snapshot] = 0
+            self._model_metadata[snapshot.name].backfill_now()
 
     def update_plan(self, snapshot: Snapshot, _batch_idx: int) -> tuple[int, int]:
         self._count[snapshot] += 1
@@ -71,14 +232,37 @@ class MaterializationTracker:
         expected_count = self._batches[snapshot]
         return (current_count, expected_count)
 
-    def notify_queue_next(self) -> tuple[str, bool] | None:
+    def notify_queue_next(self) -> tuple[str, ModelMaterializationStatus] | None:
+        """Notifies about the next materialization in the queue. At the end of a
+        sqlmesh run the `all_up_to_date` flag should be set to True.
+
+        Returns:
+            A tuple containing the name of the materialization and its status,
+            or None if there are no more model statuses left in the queue
+        """
         if self._current_index >= len(self._sorted_dag):
             return None
-        check_name = self._sorted_dag[self._current_index]
-        if check_name in self._complete_update_status:
-            self._current_index += 1
-            return (check_name, self._complete_update_status[check_name])
-        return None
+        self.logger.debug(
+            f"MaterializationTracker index {self._current_index}",
+            extra=dict(
+                current_index=self._current_index,
+            ),
+        )
+
+        while True:
+            model_name_for_notification = self._sorted_dag[self._current_index]
+
+            self.logger.debug(f"notifying about {model_name_for_notification}")
+
+            if model_name_for_notification in self._non_model_names:
+                self._current_index += 1
+                self.logger.debug(f"skipping non-model snapshot {model_name_for_notification}")
+                continue
+
+            if model_name_for_notification in self._model_metadata:
+                self._current_index += 1
+                return (model_name_for_notification, self._model_metadata[model_name_for_notification])
+            return None
 
 
 class SQLMeshEventLogContext:
@@ -136,7 +320,7 @@ class PlanOrRunFailedError(Exception):
 class DagsterSQLMeshEventHandler:
     def __init__(
         self,
-        context: AssetExecutionContext,
+        context: dg.AssetExecutionContext,
         models_map: dict[str, Model],
         dag: DAG[t.Any],
         prefix: str,
@@ -158,10 +342,11 @@ class DagsterSQLMeshEventHandler:
 
     def notify_success(
         self, sqlmesh_context: SQLMeshContext
-    ) -> t.Iterator[MaterializeResult]:
+    ) -> t.Iterator[dg.MaterializeResult]:
         notify = self._tracker.notify_queue_next()
+
         while notify is not None:
-            completed_name, update_status = notify
+            completed_name, materialization_status = notify
 
             # If the model is not in the context, we can skip any notification
             # This will happen for external models
@@ -176,25 +361,68 @@ class DagsterSQLMeshEventHandler:
             if model:
                 # Passing model.fqn to get internal unique asset key
                 output_key = get_asset_key_str(model.fqn)
-                if not self._is_testing:
-                    # Stupidly dagster when testing cannot use the following
-                    # method so we must specifically skip this when testing
-                    asset_key = self._context.asset_key_for_output(output_key)
-                    yield MaterializeResult(
-                        asset_key=asset_key,
-                        metadata={
-                            "updated": update_status,
-                            "duration_ms": 0,
-                        },
+                if self._is_testing:
+                    asset_key = dg.AssetKey(["testing", output_key])
+                    self._logger.debug(
+                        f"Generated fake asset key for testing: {asset_key.to_user_string()}"
                     )
+                else:
+                    asset_key = self._context.asset_key_for_output(output_key)
+                yield self.create_materialize_result(self._context, asset_key, materialization_status)
             notify = self._tracker.notify_queue_next()
+        else:
+            self._logger.debug("No more materializations to process")
+
+    def create_materialize_result(
+        self,
+        context: dg.AssetExecutionContext,
+        asset_key: dg.AssetKey,
+        current_materialization_status: ModelMaterializationStatus,
+    ) -> dg.MaterializeResult:
+        last_materialization = context.instance.get_latest_materialization_event(
+            asset_key
+        )
+
+        if not last_materialization:
+            self._logger.debug(
+                f"No materialization found for {asset_key.to_user_string()}, all dates will be set to now."
+            )
+            last_materialization_status = None
+        else:
+            assert last_materialization.asset_materialization is not None, (
+                "Expected asset materialization to be present."
+            )
+            try:
+                last_materialization_status = ModelMaterializationStatus.from_dagster_metadata(
+                    dict(last_materialization.asset_materialization.metadata)
+                )
+            except Exception as e:
+                self._logger.warning(
+                    f"Failed to validate last materialization for {asset_key.to_user_string()}: {e}. Ignoring and using the current status"
+                )
+                last_materialization_status = None
+
+        return dg.MaterializeResult(
+            asset_key=asset_key,
+            metadata=current_materialization_status.as_dagster_metadata(last_materialization_status),
+        )
 
     def report_event(self, event: console.ConsoleEvent) -> None:
         log_context = self.log_context(event)
 
         match event:
+            case console.PlanBuilt(plan=plan):
+                log_context.info(
+                    "Plan built",
+                    {
+                        "snapshots": [s.name for s in plan.environment.snapshots],
+                        "models_to_backfill": plan.models_to_backfill,
+                        "empty_backfill": plan.empty_backfill,
+                        "requires_backfill": plan.requires_backfill,
+                    },
+                )
+                self._tracker.initialize_from_plan(plan)
             case console.StartPlanEvaluation(plan=plan):
-                self._tracker.init_complete_update_status(plan.environment.snapshots)
                 log_context.info(
                     "Starting Plan Evaluation",
                     {
@@ -226,14 +454,23 @@ class DagsterSQLMeshEventHandler:
             ):
                 done, expected = self._tracker.update_plan(snapshot, batch_idx)
 
-                log_context.info(
-                    "Snapshot progress update",
-                    {
-                        "asset_key": get_asset_key_str(snapshot.model.name),
-                        "progress": f"{done}/{expected}",
-                        "duration_ms": duration_ms,
-                    },
-                )
+                if done == expected:
+                    log_context.info(
+                        "Snapshot progress complete",
+                        {
+                            "asset_key": get_asset_key_str(snapshot.model.name),
+                        },
+                    )
+                    self._tracker.update_run(snapshot)
+                else:
+                    log_context.info(
+                        "Snapshot progress update",
+                        {
+                            "asset_key": get_asset_key_str(snapshot.model.name),
+                            "progress": f"{done}/{expected}",
+                            "duration_ms": duration_ms,
+                        },
+                    )
             case console.LogSuccess(success=success):
                 self.update_stage("done")
                 if success:
@@ -304,13 +541,13 @@ class DagsterSQLMeshEventHandler:
         return self._errors[:]
 
 
-class SQLMeshResource(ConfigurableResource):
+class SQLMeshResource(dg.ConfigurableResource):
     config: SQLMeshContextConfig
     is_testing: bool = False
 
     def run(
         self,
-        context: AssetExecutionContext,
+        context: dg.AssetExecutionContext,
         *,
         context_factory: ContextFactory[ContextCls] = DEFAULT_CONTEXT_FACTORY,
         environment: str = "dev",
@@ -322,7 +559,7 @@ class SQLMeshResource(ConfigurableResource):
         skip_run: bool = False,
         plan_options: PlanOptions | None = None,
         run_options: RunOptions | None = None,
-    ) -> t.Iterable[MaterializeResult]:
+    ) -> t.Iterable[dg.MaterializeResult]:
         """Execute SQLMesh based on the configuration given"""
         plan_options = plan_options or {}
         run_options = run_options or {}
@@ -396,16 +633,19 @@ class SQLMeshResource(ConfigurableResource):
             except SQLMeshError as e:
                 logger.error(f"sqlmesh error: {e}")
                 raise_for_sqlmesh_errors(event_handler, [GenericSQLMeshError(str(e))])
+            logger.info(f"sqlmesh run completed for {len(models_map)} models")
             # Some errors do not raise exceptions immediately, so we need to check
             # the event handler for any errors that may have been collected.
             raise_for_sqlmesh_errors(event_handler)
 
             yield from event_handler.notify_success(mesh.context)
 
+            logger.debug("sqlmesh selected all models notified of completion")
+
     def create_event_handler(
         self,
         *,
-        context: AssetExecutionContext,
+        context: dg.AssetExecutionContext,
         dag: DAG[str],
         models_map: dict[str, Model],
         prefix: str,
@@ -420,7 +660,7 @@ class SQLMeshResource(ConfigurableResource):
         )
 
     def _get_selected_models_from_context(
-        self, context: AssetExecutionContext, models: MappingProxyType[str, Model]
+        self, context: dg.AssetExecutionContext, models: MappingProxyType[str, Model]
     ) -> tuple[set[str], dict[str, Model], list[str] | None]:
         models_map = models.copy()
         try:
