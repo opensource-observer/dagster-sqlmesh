@@ -19,7 +19,6 @@ from dagster_sqlmesh.console import (
     ConsoleEventHandler,
     ConsoleException,
     EventConsole,
-    Plan,
     SnapshotCategorizer,
 )
 from dagster_sqlmesh.events import ConsoleGenerator
@@ -179,17 +178,7 @@ class SQLMeshInstance(t.Generic[ContextCls]):
         ) -> None:
             logger.debug("dagster-sqlmesh: thread started")
 
-            def auto_execute_plan(event: ConsoleEvent):
-                """"""
-                if isinstance(event, Plan):
-                    try:
-                        event.plan_builder.apply()
-                    except Exception as e:
-                        controller.console.exception(e)
-                return None
-
             try:
-                controller.console.add_handler(auto_execute_plan)
                 builder = t.cast(
                     PlanBuilder,
                     context.plan_builder(
