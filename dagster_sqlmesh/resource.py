@@ -187,7 +187,7 @@ class MaterializationTracker:
 
         # Update all of the model status that are to be updated or restated in this plan
         # This condition was taken from a condition found in sqlmesh's `Context`
-        # object
+        # object. It's used to determine if there are any changes in the plan
         if (
             not plan.context_diff.has_changes
             and not plan.requires_backfill
