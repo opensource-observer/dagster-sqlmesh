@@ -185,9 +185,6 @@ class MaterializationTracker:
                 created_at=created_at,
             )
 
-        self.logger.debug(f"non_models: {self._non_model_names}")
-        self.logger.debug(f"snapshots_by_name: {snapshots_by_name.keys()}")
-
         # Update all of the model status that are to be updated or restated in this plan
         # This condition was taken from a condition found in sqlmesh's `Context`
         # object
@@ -251,8 +248,6 @@ class MaterializationTracker:
 
         while True:
             model_name_for_notification = self._sorted_dag[self._current_index]
-
-            self.logger.debug(f"notifying about {model_name_for_notification}")
 
             if model_name_for_notification in self._non_model_names:
                 self._current_index += 1
@@ -363,7 +358,7 @@ class DagsterSQLMeshEventHandler:
                 output_key = get_asset_key_str(model.fqn)
                 if self._is_testing:
                     asset_key = dg.AssetKey(["testing", output_key])
-                    self._logger.debug(
+                    self._logger.warning(
                         f"Generated fake asset key for testing: {asset_key.to_user_string()}"
                     )
                 else:
