@@ -148,8 +148,9 @@ class Plan(BaseConsoleEvent):
 @dataclass(kw_only=True)
 class LogTestResults(BaseConsoleEvent):
     result: unittest.result.TestResult
-    output: str | None
+    output: str | None = None
     target_dialect: str
+
 
 @dataclass(kw_only=True)
 class ShowSQL(BaseConsoleEvent):
@@ -221,7 +222,7 @@ class ShowTableDiffSummary(BaseConsoleEvent):
 
 @dataclass(kw_only=True)
 class PlanBuilt(BaseConsoleEvent):
-    plan: SQLMeshPlan 
+    plan: SQLMeshPlan
 
 ConsoleEvent = (
     StartPlanEvaluation
@@ -303,7 +304,7 @@ class IntrospectingConsole(Console):
         for known_event in known_events_classes:
             assert inspect.isclass(known_event), "event must be a class"
             known_events.append(known_event.__name__)
-            
+
 
         # Iterate through all the available abstract methods in console
         for method_name in Console.__abstractmethods__:
@@ -319,7 +320,7 @@ class IntrospectingConsole(Console):
             # events has it's values checked. The dataclass should define the
             # required fields and everything else should be sent to a catchall
             # argument in the dataclass for the event
-            
+
             # Convert method name from snake_case to camel case
             camel_case_method_name = "".join(
                 word.capitalize()
@@ -355,6 +356,25 @@ class IntrospectingConsole(Console):
         for param_name, param in signature.parameters.items():
             if param_name == "self":
                 func_signature.append("self")
+                continue
+
+            # Handle *args - convert to unknown_args
+            if param.kind == inspect.Parameter.VAR_POSITIONAL:
+                param_type_name = param.annotation
+                if not isinstance(param_type_name, str):
+                    param_type_name = param_type_name.__name__
+                func_signature.append(f"*{param_name}: '{param_type_name}'")
+                # Put *args into unknown_args instead of trying to pass as positional
+                call_params.append(f"_unknown_args_from_varargs=dict(enumerate({param_name}))")
+                continue
+
+            # Handle **kwargs
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                param_type_name = param.annotation
+                if not isinstance(param_type_name, str):
+                    param_type_name = param_type_name.__name__
+                func_signature.append(f"**{param_name}: '{param_type_name}'")
+                call_params.append(f"**{param_name}")
                 continue
 
             if param.default is inspect._empty:
@@ -394,16 +414,21 @@ class IntrospectingConsole(Console):
     def publish_known_event(self, event_name: str, **kwargs: t.Any) -> None:
         console_event = get_console_event_by_name(event_name)
         assert console_event is not None, f"Event {event_name} not found"
-        
+
         expected_kwargs_fields = console_event.__dataclass_fields__
         expected_kwargs: dict[str, t.Any] = {}
         unknown_args: dict[str, t.Any] = {}
+
+        # Handle special case for *args converted to unknown_args
+        varargs_data = kwargs.pop("_unknown_args_from_varargs", {})
+        unknown_args.update(varargs_data)
+
         for key, value in kwargs.items():
             if key not in expected_kwargs_fields:
                 unknown_args[key] = value
             else:
                 expected_kwargs[key] = value
-        
+
         event = console_event(**expected_kwargs, unknown_args=unknown_args)
 
         self.publish(event)
