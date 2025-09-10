@@ -342,9 +342,9 @@ class IntrospectingConsole(Console):
                 setattr(cls, method_name, handler)
 
     @classmethod
-    def create_event_handler(cls, method_name: str, event_cls: type[BaseConsoleEvent], signature: inspect.Signature):
+    def create_event_handler(cls, method_name: str, event_cls: type[BaseConsoleEvent], signature: inspect.Signature) -> t.Callable[..., None]:
         """Create a GeneratedCallable for known events."""
-        def handler(self, *args: t.Any, **kwargs: t.Any) -> None:
+        def handler(self: IntrospectingConsole, *args: t.Any, **kwargs: t.Any) -> None:
             callable_handler = GeneratedCallable(self, event_cls, signature, method_name)
             return callable_handler(self, *args, **kwargs)
 
@@ -352,9 +352,9 @@ class IntrospectingConsole(Console):
 
 
     @classmethod
-    def create_unknown_event_handler(cls, method_name: str, signature: inspect.Signature):
+    def create_unknown_event_handler(cls, method_name: str, signature: inspect.Signature) -> t.Callable[..., None]:
         """Create an UnknownEventCallable for unknown events."""
-        def handler(self, *args: t.Any, **kwargs: t.Any) -> None:
+        def handler(self: IntrospectingConsole, *args: t.Any, **kwargs: t.Any) -> None:
             callable_handler = UnknownEventCallable(self, method_name, signature)
             return callable_handler(self, *args, **kwargs)
 
@@ -452,7 +452,7 @@ class GeneratedCallable(t.Generic[EventType]):
         except TypeError as e:
             # If binding fails, collect all args/kwargs as unknown
             self.console.logger.warning(f"Failed to bind arguments for {self.method_name}: {e}")
-            unknown_args = dict(enumerate(args[1:]))  # Skip 'self'
+            unknown_args = {str(i): arg for i, arg in enumerate(args[1:])}  # Skip 'self'
             unknown_args.update(kwargs)
             self._create_and_publish_event({}, unknown_args)
             return
@@ -481,7 +481,7 @@ class GeneratedCallable(t.Generic[EventType]):
 
         # Create and publish the event
         event = self.event_cls(**expected_kwargs, unknown_args=unknown_args)
-        self.console.publish(event)
+        self.console.publish(t.cast(ConsoleEvent, event))
 
 
 class UnknownEventCallable:
@@ -507,7 +507,7 @@ class UnknownEventCallable:
             bound_args.pop("self", None)  # Remove self from arguments
         except TypeError:
             # If binding fails, collect all args/kwargs
-            bound_args = dict(enumerate(args[1:]))  # Skip 'self'
+            bound_args = {str(i): arg for i, arg in enumerate(args[1:])}  # Skip 'self'
             bound_args.update(kwargs)
 
         self.console.publish_unknown_event(self.method_name, **bound_args)
