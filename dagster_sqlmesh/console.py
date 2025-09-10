@@ -337,9 +337,7 @@ class IntrospectingConsole(Console):
     def __init__(self, log_override: logging.Logger | None = None) -> None:
         self._handlers: dict[str, ConsoleEventHandler] = {}
         self.logger = log_override or logger
-        self.id = str(uuid.uuid4())
         self.logger.debug(f"EventConsole[{self.id}]: created")
-        self.categorizer = None
 
         # Create methods now that we have self
         for method_type, method_name, event_cls, signature in self._method_info:
