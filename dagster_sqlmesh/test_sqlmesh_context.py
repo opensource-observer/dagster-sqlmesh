@@ -190,15 +190,6 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
     assert (
         march_sum_query_restate[0][0] != march_sum_query[0][0]
     ), "March sum should change"
-    # Check if both queries have results before comparing
-    if len(intermediate_2_query) > 0 and len(intermediate_2_query_restate) > 0:
-        assert (
-            intermediate_2_query_restate[0][0] == intermediate_2_query[0][0]
-        ), "Intermediate model should not change during restate"
-    elif len(intermediate_2_query) == 0 and len(intermediate_2_query_restate) == 0:
-        # Both queries are empty, which is acceptable behavior for restated models
-        pass  
-    else:
-        # One has results and the other doesn't - this could be due to SQLMesh version differences
-        # in how restate operations work, but it's not necessarily a failure
-        pass
+    assert (
+        intermediate_2_query_restate[0][0] == intermediate_2_query[0][0]
+    ), "Intermediate model should not change during restate"
