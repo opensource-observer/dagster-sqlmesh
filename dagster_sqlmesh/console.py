@@ -299,14 +299,13 @@ class IntrospectingConsole(Console):
 
     def __init_subclass__(cls):
         super().__init_subclass__()
-        # Store method info for later creation in __init__
-        cls._method_info = []
 
         known_events_classes = cls.events
         known_events: list[str] = []
         for known_event in known_events_classes:
             assert inspect.isclass(known_event), "event must be a class"
             known_events.append(known_event.__name__)
+
 
         # Iterate through all the available abstract methods in console
         for method_name in Console.__abstractmethods__:
@@ -317,35 +316,56 @@ class IntrospectingConsole(Console):
                     continue
             logger.debug(f"Checking {method_name}")
 
+            # if the method doesn't exist we automatically create a method by
+            # inspecting the method's arguments. Anything that matches "known"
+            # events has it's values checked. The dataclass should define the
+            # required fields and everything else should be sent to a catchall
+            # argument in the dataclass for the event
+
             # Convert method name from snake_case to camel case
             camel_case_method_name = "".join(
                 word.capitalize()
                 for i, word in enumerate(method_name.split("_"))
             )
 
-            signature = inspect.signature(getattr(Console, method_name))
-
             if camel_case_method_name in known_events:
-                logger.debug(f"Storing {method_name} for {camel_case_method_name}")
+                logger.debug(f"Creating {method_name} for {camel_case_method_name}")
+                signature = inspect.signature(getattr(Console, method_name))
                 event_cls = get_console_event_by_name(camel_case_method_name)
                 assert event_cls is not None, f"Event {camel_case_method_name} not found"
-                cls._method_info.append(('known', method_name, event_cls, signature))
+                handler = cls.create_event_handler(method_name, event_cls, signature)
+                setattr(cls, method_name, handler)
             else:
-                logger.debug(f"Storing {method_name} for unknown event")
-                cls._method_info.append(('unknown', method_name, None, signature))
+                logger.debug(f"Creating {method_name} for unknown event")
+                signature = inspect.signature(getattr(Console, method_name))
+                handler = cls.create_unknown_event_handler(method_name, signature)
+                setattr(cls, method_name, handler)
+
+    @classmethod
+    def create_event_handler(cls, method_name: str, event_cls: type[BaseConsoleEvent], signature: inspect.Signature) -> t.Callable[..., None]:
+        """Create a GeneratedCallable for known events."""
+        def handler(self: IntrospectingConsole, *args: t.Any, **kwargs: t.Any) -> None:
+            callable_handler = GeneratedCallable(self, event_cls, signature, method_name)
+            return callable_handler(self, *args, **kwargs)
+
+        return handler
+
+
+    @classmethod
+    def create_unknown_event_handler(cls, method_name: str, signature: inspect.Signature) -> t.Callable[..., None]:
+        """Create an UnknownEventCallable for unknown events."""
+        def handler(self: IntrospectingConsole, *args: t.Any, **kwargs: t.Any) -> None:
+            callable_handler = UnknownEventCallable(self, method_name, signature)
+            return callable_handler(self, *args, **kwargs)
+
+        return handler
 
     def __init__(self, log_override: logging.Logger | None = None) -> None:
         self._handlers: dict[str, ConsoleEventHandler] = {}
         self.logger = log_override or logger
+        self.id = str(uuid.uuid4())
         self.logger.debug(f"EventConsole[{self.id}]: created")
-
-        # Create methods now that we have self
-        for method_type, method_name, event_cls, signature in self._method_info:
-            if method_type == 'known':
-                handler = GeneratedCallable(self, event_cls, signature, method_name)
-            else:
-                handler = UnknownEventCallable(self, method_name, signature)
-            setattr(self, method_name, handler)
+        self.categorizer = None
 
     def publish_known_event(self, event_name: str, **kwargs: t.Any) -> None:
         console_event = get_console_event_by_name(event_name)
