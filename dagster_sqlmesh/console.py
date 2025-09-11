@@ -346,7 +346,7 @@ class IntrospectingConsole(Console):
         """Create a GeneratedCallable for known events."""
         def handler(self: IntrospectingConsole, *args: t.Any, **kwargs: t.Any) -> None:
             callable_handler = GeneratedCallable(self, event_cls, signature, method_name)
-            return callable_handler(self, *args, **kwargs)
+            return callable_handler(*args, **kwargs)
 
         return handler
 
@@ -356,7 +356,7 @@ class IntrospectingConsole(Console):
         """Create an UnknownEventCallable for unknown events."""
         def handler(self: IntrospectingConsole, *args: t.Any, **kwargs: t.Any) -> None:
             callable_handler = UnknownEventCallable(self, method_name, signature)
-            return callable_handler(self, *args, **kwargs)
+            return callable_handler(*args, **kwargs)
 
         return handler
 
