@@ -367,24 +367,6 @@ class IntrospectingConsole(Console):
         self.logger.debug(f"EventConsole[{self.id}]: created")
         self.categorizer = None
 
-    def publish_known_event(self, event_name: str, **kwargs: t.Any) -> None:
-        console_event = get_console_event_by_name(event_name)
-        assert console_event is not None, f"Event {event_name} not found"
-
-        expected_kwargs_fields = console_event.__dataclass_fields__
-        expected_kwargs: dict[str, t.Any] = {}
-        unknown_args: dict[str, t.Any] = {}
-
-        for key, value in kwargs.items():
-            if key not in expected_kwargs_fields:
-                unknown_args[key] = value
-            else:
-                expected_kwargs[key] = value
-
-        event = console_event(**expected_kwargs, unknown_args=unknown_args)
-
-        self.publish(event)
-
     def publish(self, event: ConsoleEvent) -> None:
         self.logger.debug(
             f"EventConsole[{self.id}]: sending event {event.__class__.__name__} to {len(self._handlers)}"
@@ -441,32 +423,30 @@ class GeneratedCallable(t.Generic[EventType]):
 
     def __call__(self, *args: t.Any, **kwargs: t.Any) -> None:
         """Create an instance of the event class with the provided arguments."""
+
         # Bind arguments to the original signature
         try:
-            bound = self.original_signature.bind(*args, **kwargs)
+            bound = self.original_signature.bind(self.console, *args, **kwargs)
             bound.apply_defaults()
         except TypeError as e:
             # If binding fails, collect all args/kwargs as unknown
             self.console.logger.warning(f"Failed to bind arguments for {self.method_name}: {e}")
             unknown_args = {str(i): arg for i, arg in enumerate(args[1:])}  # Skip 'self'
             unknown_args.update(kwargs)
-            self._create_and_publish_event({}, unknown_args)
+            self._create_and_publish_event({})
             return
 
         # Process bound arguments
         bound_args = dict(bound.arguments)
         bound_args.pop("self", None)  # Remove self from arguments
 
-        self._create_and_publish_event(bound_args, {})
+        self._create_and_publish_event(bound_args)
 
-    def _create_and_publish_event(self, bound_args: dict[str, t.Any], extra_unknown: dict[str, t.Any]) -> None:
+    def _create_and_publish_event(self, bound_args: dict[str, t.Any]) -> None:
         """Create and publish the event with proper argument handling."""
         expected_fields = self.event_cls.__dataclass_fields__
         expected_kwargs: dict[str, t.Any] = {}
         unknown_args: dict[str, t.Any] = {}
-
-        # Add any extra unknown args first
-        unknown_args.update(extra_unknown)
 
         # Process bound arguments
         for key, value in bound_args.items():
@@ -476,7 +456,7 @@ class GeneratedCallable(t.Generic[EventType]):
                 unknown_args[key] = value
 
         # Create and publish the event
-        event = self.event_cls(**expected_kwargs, unknown_args=unknown_args)
+        event = self.event_cls(**expected_kwargs)
         self.console.publish(t.cast(ConsoleEvent, event))
 
 

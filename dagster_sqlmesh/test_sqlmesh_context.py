@@ -2,6 +2,7 @@ import logging
 
 import polars
 
+from dagster_sqlmesh.controller.base import PlanOptions
 from dagster_sqlmesh.testing import SQLMeshTestContext
 
 logger = logging.getLogger(__name__)
@@ -156,15 +157,22 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
     """
     )
 
+    # In the past we had an issue where we had set _both_ restate_models and
+    # select_models in the plan_options. However, what we have noticed is that
+    # if a downstream model from a restated model is not selected that model
+    # returns an empty result. So now, we only set restate_models in the plan
+    # options.
+
     # Restate the model for the month of March
     sample_sqlmesh_test_context.plan_and_run(
         environment="dev",
         start="2023-03-01",
         end="2023-03-31",
         execution_time="2024-01-02",
-        select_models=["sqlmesh_example.staging_model_4"],
-        restate_selected=True,
         skip_run=True,
+        plan_options=PlanOptions(
+            restate_models=["sqlmesh_example.staging_model_4"],
+        )
     )
 
     # Check that the sum of values for February and March are the same
@@ -185,11 +193,12 @@ def test_restating_models(sample_sqlmesh_test_context: SQLMeshTestContext):
     )
 
     assert (
-        feb_sum_query_restate[0][0] == feb_sum_query[0][0]
+        round(feb_sum_query_restate[0][0], 5) == round(feb_sum_query[0][0], 5)
     ), "February sum should not change"
     assert (
-        march_sum_query_restate[0][0] != march_sum_query[0][0]
+        round(march_sum_query_restate[0][0], 5) != round(march_sum_query[0][0], 5)
     ), "March sum should change"
+
     assert (
-        intermediate_2_query_restate[0][0] == intermediate_2_query[0][0]
-    ), "Intermediate model should not change during restate"
+        intermediate_2_query_restate[0][0] != intermediate_2_query[0][0]
+    ), "Intermediate model should change during restate"

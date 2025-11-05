@@ -144,8 +144,11 @@ class SQLMeshTestContext:
         execution_time: TimeLike | None = None,
         start: TimeLike | None = None,
         end: TimeLike | None = None,
+        default_catalog: str | None = None,
         select_models: list[str] | None = None,
         restate_selected: bool = False,
+        plan_options: PlanOptions | None = None,
+        run_options: RunOptions | None = None,
         skip_run: bool = False,
     ):
         """Runs plan and run on SQLMesh with the given configuration and record all of the generated events.
@@ -168,10 +171,10 @@ class SQLMeshTestContext:
         controller = self.create_controller()
         recorder = ConsoleRecorder()
         # controller.add_event_handler(ConsoleRecorder())
-        plan_options = PlanOptions(
+        plan_options = plan_options or PlanOptions(
             enable_preview=True,
         )
-        run_options = RunOptions()
+        run_options = run_options or RunOptions()
         if execution_time:
             plan_options["execution_time"] = execution_time
             run_options["execution_time"] = execution_time

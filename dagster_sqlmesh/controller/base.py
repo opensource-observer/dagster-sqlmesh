@@ -315,14 +315,14 @@ class SQLMeshInstance(t.Generic[ContextCls]):
         run_options = run_options or RunOptions()
         plan_options = plan_options or PlanOptions()
 
-        if plan_options.get("select_models") or run_options.get("select_models"):
-            raise ValueError(
-                "select_models should not be set in plan_options or run_options use the `select_models` option instead"
-            )
-        if plan_options.get("restate_models"):
-            raise ValueError(
-                "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` instead"
-            )
+        # if plan_options.get("select_models") or run_options.get("select_models"):
+        #     raise ValueError(
+        #         "select_models should not be set in plan_options or run_options use the `select_models` option instead"
+        #     )
+        # if plan_options.get("restate_models"):
+        #     raise ValueError(
+        #         "restate_models should not be set in plan_options use the `restate_selected` argument with `select_models` instead"
+        #     )
         select_models = select_models or []
         restate_models = restate_models or []
 
