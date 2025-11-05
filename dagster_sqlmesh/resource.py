@@ -369,7 +369,7 @@ class DagsterSQLMeshEventHandler:
 
     def notify_success(
         self, sqlmesh_context: SQLMeshContext
-    ) -> t.Iterator[dg.MaterializeResult]:
+    ) -> t.Iterator[dg.MaterializeResult[t.Any]]:
         notify = self._tracker.notify_queue_next()
 
         while notify is not None:
@@ -412,7 +412,7 @@ class DagsterSQLMeshEventHandler:
         context: dg.AssetExecutionContext,
         asset_key: dg.AssetKey,
         current_materialization_status: ModelMaterializationStatus,
-    ) -> dg.MaterializeResult:
+    ) -> dg.MaterializeResult[t.Any]:
         last_materialization = context.instance.get_latest_materialization_event(
             asset_key
         )
@@ -598,7 +598,7 @@ class SQLMeshResource(dg.ConfigurableResource):
         plan_options: PlanOptions | None = None,
         run_options: RunOptions | None = None,
         materializations_enabled: bool = True,
-    ) -> t.Iterable[dg.MaterializeResult]:
+    ) -> t.Iterable[dg.MaterializeResult[t.Any]]:
         """Execute SQLMesh based on the configuration given"""
         plan_options = plan_options or {}
         run_options = run_options or {}

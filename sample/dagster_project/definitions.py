@@ -53,7 +53,7 @@ class RewrittenSQLMeshTranslator(SQLMeshDagsterTranslator):
 
 
 @asset(key=["sources", "reset_asset"])
-def reset_asset() -> MaterializeResult:
+def reset_asset() -> MaterializeResult[t.Any]:
     """An asset used for testing this entire workflow. If the duckdb database is
     found, this will delete it. This allows us to continously test this dag if
     this specific asset is materialized
@@ -108,7 +108,7 @@ def post_full_model() -> pl.DataFrame:
 )
 def sqlmesh_project(
     context: AssetExecutionContext, sqlmesh: SQLMeshResource
-) -> t.Iterator[MaterializeResult]:
+) -> t.Iterator[MaterializeResult[t.Any]]:
     yield from sqlmesh.run(context)
 
 
