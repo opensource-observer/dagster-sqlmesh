@@ -5,6 +5,16 @@ env:
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Select the type of version bump'
+        type: choice
+        options:
+          - 'automatic'
+          - 'minor'
+          - 'major'
+        default: 'automatic'
+        required: true
 
 jobs:
   release:
@@ -66,4 +76,15 @@ jobs:
       - name: Run the release
         run: |
           pnpm release
+        if: ${{ inputs.bump != 'automatic' }}
+
+      - name: Run minor bump
+        run: |
+          pnpm release-minor
+        if: ${{ inputs.bump == 'minor' }}
+
+      - name: Run major bump
+        run: |
+          pnpm release --increment major
+        if: ${{ inputs.bump == 'major' }}
         
