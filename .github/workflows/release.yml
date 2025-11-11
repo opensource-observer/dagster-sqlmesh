@@ -76,7 +76,7 @@ jobs:
       - name: Run the release
         run: |
           pnpm release
-        if: ${{ inputs.bump != 'automatic' }}
+        if: ${{ inputs.bump == 'automatic' }}
 
       - name: Run minor bump
         run: |
