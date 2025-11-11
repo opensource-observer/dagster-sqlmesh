@@ -59,10 +59,11 @@ def test_sqlmesh_resource_should_report_no_errors(
 ):
     resource = sample_sqlmesh_resource_initialization.resource
     dg_context = sample_sqlmesh_resource_initialization.dagster_context
+    context_config = sample_sqlmesh_resource_initialization.test_context.context_config
 
     success = True
     try:
-        for result in resource.run(dg_context):
+        for result in resource.run(context=dg_context, config=context_config):
             pass
     except PlanOrRunFailedError as e:
         success = False
@@ -83,10 +84,11 @@ def test_sqlmesh_resource_properly_reports_errors(
     )
     resource = sqlmesh_resource_initialization.resource
     dg_context = sqlmesh_resource_initialization.dagster_context
+    context_config = sqlmesh_resource_initialization.test_context.context_config
 
     caught_failure = False
     try:
-        for result in resource.run(dg_context):
+        for result in resource.run(context=dg_context, config=context_config):
             pass
     except PlanOrRunFailedError as e:
         caught_failure = True
@@ -106,6 +108,7 @@ def test_sqlmesh_resource_properly_reports_errors_not_thrown(
 ):
     dg_context = sample_sqlmesh_resource_initialization.dagster_context
     resource = sample_sqlmesh_resource_initialization.resource
+    context_config = sample_sqlmesh_resource_initialization.test_context.context_config
 
     def event_handler_factory(
         *args: t.Any, **kwargs: t.Any
@@ -120,7 +123,7 @@ def test_sqlmesh_resource_properly_reports_errors_not_thrown(
 
     caught_failure = False
     try:
-        for result in resource.run(dg_context):
+        for result in resource.run(context=dg_context, config=context_config):
             pass
     except PlanOrRunFailedError as e:
         caught_failure = True
@@ -151,17 +154,19 @@ def test_sqlmesh_resource_should_properly_materialize_results_when_no_plan_is_ru
     resource = sample_sqlmesh_resource_initialization.resource
     dg_context = sample_sqlmesh_resource_initialization.dagster_context
     dg_instance = sample_sqlmesh_resource_initialization.dagster_instance
+    context_config = sample_sqlmesh_resource_initialization.test_context.context_config
 
     # First run should materialize all models
     initial_results: list[dg.MaterializeResult] = []
-    for result in resource.run(dg_context):
+    for result in resource.run(context=dg_context, config=context_config):
         initial_results.append(result)
         assert result.asset_key is not None, "Expected asset key to be present."
-        dg_instance.report_runless_asset_event(dg.AssetMaterialization(
-            asset_key=result.asset_key,
-            metadata=result.metadata,
-        ))
-
+        dg_instance.report_runless_asset_event(
+            dg.AssetMaterialization(
+                asset_key=result.asset_key,
+                metadata=result.metadata,
+            )
+        )
 
     # All metadata times should be set to the same time
     initial_times: set[float] = set()
@@ -180,7 +185,7 @@ def test_sqlmesh_resource_should_properly_materialize_results_when_no_plan_is_ru
 
     # Second run should also materialize all models
     second_results: list[dg.MaterializeResult] = []
-    for result in resource.run(dg_context):
+    for result in resource.run(context=dg_context, config=context_config):
         second_results.append(result)
 
     assert len(second_results) > 0, "Expected second results to be non-empty."
@@ -204,7 +209,9 @@ def test_sqlmesh_resource_should_properly_materialize_results_when_no_plan_is_ru
     # Third run will restate the full model
     third_results: list[dg.MaterializeResult] = []
     for result in resource.run(
-        dg_context, restate_models=["sqlmesh_example.full_model"]
+        context=dg_context,
+        config=context_config,
+        restate_models=["sqlmesh_example.full_model"],
     ):
         third_results.append(result)
 

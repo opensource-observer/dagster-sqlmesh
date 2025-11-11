@@ -56,8 +56,8 @@ class TestSQLMeshResource(SQLMeshResource):
     It allows for easy setup and teardown of the SQLMesh context.
     """
 
-    def __init__(self, config: SQLMeshContextConfig, is_testing: bool = False):
-        super().__init__(config=config, is_testing=is_testing)
+    def __init__(self, is_testing: bool = False):
+        super().__init__(is_testing=is_testing)
         def default_event_handler_factory(*args: t.Any, **kwargs: t.Any) -> DagsterSQLMeshEventHandler:
             """Default event handler factory for the SQLMesh resource."""
             return DagsterSQLMeshEventHandler(*args, **kwargs)
@@ -82,7 +82,9 @@ class TestSQLMeshResource(SQLMeshResource):
             DagsterSQLMeshEventHandler: The created event handler.
         """
         # Ensure translator is passed to the event handler factory
-        kwargs['translator'] = self.config.get_translator()
+        # FIXME: this is a hack to deal with an older signature that didn't expected the config
+        config = t.cast(SQLMeshContextConfig, kwargs.pop("config"))
+        kwargs["translator"] = config.get_translator()
         return self._event_handler_factory(*args, **kwargs)
 
 
@@ -99,9 +101,7 @@ class SQLMeshTestContext:
         )
 
     def create_resource(self) -> TestSQLMeshResource:
-        return TestSQLMeshResource(
-            config=self.context_config, is_testing=True,
-        )
+        return TestSQLMeshResource(is_testing=True)
 
     def query(self, *args: t.Any, **kwargs: t.Any) -> list[t.Any]:
         conn = duckdb.connect(self.db_path)

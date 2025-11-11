@@ -606,7 +606,9 @@ class SQLMeshResource(dg.ConfigurableResource):
         logger = context.log
 
         controller = self.get_controller(
-            context_factory=context_factory, log_override=logger
+            config=config,
+            context_factory=context_factory, 
+            log_override=logger
         )
 
         with controller.instance(environment) as mesh:
@@ -738,11 +740,12 @@ class SQLMeshResource(dg.ConfigurableResource):
 
     def get_controller(
         self,
+        config: SQLMeshContextConfig,
         context_factory: ContextFactory[ContextCls],
         log_override: logging.Logger | None = None,
     ) -> DagsterSQLMeshController[ContextCls]:
         return DagsterSQLMeshController.setup_with_config(
-            config=self.config,
+            config=config,
             context_factory=context_factory,
             log_override=log_override,
         )

@@ -7,8 +7,7 @@ from pydantic import Field
 from sqlmesh.core.config import Config as MeshConfig
 from sqlmesh.core.config.loader import load_configs
 
-if t.TYPE_CHECKING:
-    from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
+from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
 
 
 @dataclass
@@ -73,7 +72,7 @@ class SQLMeshContextConfig(Config):
     gateway: str
     config_override: dict[str, t.Any] | None = Field(default_factory=lambda: None)
     
-    def get_translator(self) -> "SQLMeshDagsterTranslator":
+    def get_translator(self) -> SQLMeshDagsterTranslator:
         """Get a translator instance. Override this method to provide a custom translator.
         
         Returns:
