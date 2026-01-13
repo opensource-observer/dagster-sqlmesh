@@ -25,9 +25,7 @@ from dagster_sqlmesh.controller.base import (
     ContextFactory,
 )
 from dagster_sqlmesh.controller.dagster import DagsterSQLMeshController
-
-if t.TYPE_CHECKING:
-    from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
+from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +99,9 @@ class ModelMaterializationStatus(BaseModel):
         # convert metadata values
         converted: dict[str, dg.MetadataValue] = {}
         for key, value in metadata.items():
-            assert isinstance(
-                value, dg.MetadataValue
-            ), f"Expected MetadataValue for {key}, got {type(value)}"
+            assert isinstance(value, dg.MetadataValue), (
+                f"Expected MetadataValue for {key}, got {type(value)}"
+            )
             converted[key] = value
 
         return cls.model_validate(
@@ -224,7 +222,7 @@ class MaterializationTracker:
 
     def plan(self, batches: dict[Snapshot, int]) -> None:
         self._batches = batches
-        self._count: dict[Snapshot, int] = {}
+        self._count = {}
 
         for snapshot, _ in self._batches.items():
             self._count[snapshot] = 0
@@ -331,7 +329,7 @@ class DagsterSQLMeshEventHandler:
         models_map: dict[str, Model],
         dag: DAG[t.Any],
         prefix: str,
-        translator: "SQLMeshDagsterTranslator",
+        translator: SQLMeshDagsterTranslator,
         is_testing: bool = False,
         materializations_enabled: bool = True,
     ) -> None:
@@ -423,9 +421,9 @@ class DagsterSQLMeshEventHandler:
             )
             last_materialization_status = None
         else:
-            assert (
-                last_materialization.asset_materialization is not None
-            ), "Expected asset materialization to be present."
+            assert last_materialization.asset_materialization is not None, (
+                "Expected asset materialization to be present."
+            )
             try:
                 last_materialization_status = (
                     ModelMaterializationStatus.from_dagster_metadata(
@@ -496,7 +494,9 @@ class DagsterSQLMeshEventHandler:
                     log_context.info(
                         "Snapshot progress complete",
                         {
-                            "asset_key": self._translator.get_asset_key_str(snapshot.model.name),
+                            "asset_key": self._translator.get_asset_key_str(
+                                snapshot.model.name
+                            ),
                         },
                     )
                     self._tracker.update_run(snapshot)
@@ -504,7 +504,9 @@ class DagsterSQLMeshEventHandler:
                     log_context.info(
                         "Snapshot progress update",
                         {
-                            "asset_key": self._translator.get_asset_key_str(snapshot.model.name),
+                            "asset_key": self._translator.get_asset_key_str(
+                                snapshot.model.name
+                            ),
                             "progress": f"{done}/{expected}",
                             "duration_ms": duration_ms,
                         },
@@ -580,6 +582,15 @@ class DagsterSQLMeshEventHandler:
 
 
 class SQLMeshResource(dg.ConfigurableResource):
+    """Dagster resource for executing SQLMesh plan and run operations.
+
+    The translator is obtained from `config.get_translator()` to ensure
+    consistency between asset definition loading and runtime execution.
+
+    Attributes:
+        is_testing: Whether the resource is being used in a testing context.
+    """
+
     is_testing: bool = False
 
     def run(
@@ -599,16 +610,14 @@ class SQLMeshResource(dg.ConfigurableResource):
         run_options: RunOptions | None = None,
         materializations_enabled: bool = True,
     ) -> t.Iterable[dg.MaterializeResult[t.Any]]:
-        """Execute SQLMesh based on the configuration given"""
+        """Execute SQLMesh plan and run, yielding MaterializeResult for each model."""
         plan_options = plan_options or {}
         run_options = run_options or {}
 
         logger = context.log
 
         controller = self.get_controller(
-            config=config,
-            context_factory=context_factory, 
-            log_override=logger
+            config=config, context_factory=context_factory, log_override=logger
         )
 
         with controller.instance(environment) as mesh:
@@ -620,7 +629,9 @@ class SQLMeshResource(dg.ConfigurableResource):
                 [model.fqn for model, _ in mesh.non_external_models_dag()]
             )
             selected_models_set, models_map, select_models = (
-                self._get_selected_models_from_context(context=context, config=config, models=models)
+                self._get_selected_models_from_context(
+                    context=context, config=config, models=models
+                )
             )
 
             if all_available_models == selected_models_set or select_models is None:
@@ -696,6 +707,7 @@ class SQLMeshResource(dg.ConfigurableResource):
         is_testing: bool,
         materializations_enabled: bool,
     ) -> DagsterSQLMeshEventHandler:
+        """Create an event handler for processing SQLMesh console events."""
         translator = config.get_translator()
         return DagsterSQLMeshEventHandler(
             context=context,
@@ -708,14 +720,17 @@ class SQLMeshResource(dg.ConfigurableResource):
         )
 
     def _get_selected_models_from_context(
-        self, 
-        context: dg.AssetExecutionContext, 
+        self,
+        context: dg.AssetExecutionContext,
         config: SQLMeshContextConfig,
-        models: MappingProxyType[str, Model]
+        models: MappingProxyType[str, Model],
     ) -> tuple[set[str], dict[str, Model], list[str] | None]:
+        """Get the selected models from the execution context."""
         models_map = models.copy()
         try:
-            selected_output_names = set(context.op_execution_context.selected_output_names)
+            selected_output_names = set(
+                context.op_execution_context.selected_output_names
+            )
         except (DagsterInvalidPropertyError, AttributeError) as e:
             # Special case for direct execution context when testing. This is related to:
             # https://github.com/dagster-io/dagster/issues/23633
@@ -744,6 +759,7 @@ class SQLMeshResource(dg.ConfigurableResource):
         context_factory: ContextFactory[ContextCls],
         log_override: logging.Logger | None = None,
     ) -> DagsterSQLMeshController[ContextCls]:
+        """Get a SQLMesh controller for executing operations."""
         return DagsterSQLMeshController.setup_with_config(
             config=config,
             context_factory=context_factory,

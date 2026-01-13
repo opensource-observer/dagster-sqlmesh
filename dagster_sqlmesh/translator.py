@@ -1,81 +1,95 @@
 import typing as t
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from inspect import signature
 
-from dagster import AssetDep, AssetKey, AssetOut
-from pydantic import BaseModel, Field
+from dagster import AssetKey, AssetOut, ConfigurableResource
 from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 
-from .types import ConvertibleToAssetDep, ConvertibleToAssetOut
+from .types import ConvertibleToAssetKey, ConvertibleToAssetOut
 
 
-class IntermediateAssetOut(BaseModel):
+@dataclass
+class IntermediateAssetOut:
+    """Intermediate representation of an AssetOut for lazy evaluation.
+
+    Stores information to create an AssetOut but defers creation until
+    `to_asset_out()` is called. Useful for caching during asset loading.
+    """
+
     model_key: str
     asset_key: str
     tags: t.Mapping[str, str] | None = None
     is_required: bool = True
     group_name: str | None = None
     kinds: set[str] | None = None
-    kwargs: dict[str, t.Any] = Field(default_factory=dict)
+    kwargs: dict[str, t.Any] = field(default_factory=dict)
 
     def to_asset_out(self) -> AssetOut:
+        """Convert to a Dagster AssetOut."""
         asset_key = AssetKey.from_user_string(self.asset_key)
 
+        kinds = self.kinds
         if "kinds" not in signature(AssetOut).parameters:
-            self.kinds = None
+            kinds = None
 
         return AssetOut(
             key=asset_key,
             tags=self.tags,
             is_required=self.is_required,
             group_name=self.group_name,
-            kinds=self.kinds,
+            kinds=kinds,
             **self.kwargs,
         )
 
 
-class IntermediateAssetDep(BaseModel):
+@dataclass
+class IntermediateAssetDep:
+    """Intermediate representation of an external dependency for lazy evaluation.
+
+    Converts to AssetKey for use in containerized code locations.
+    """
+
     key: str
-    kwargs: dict[str, t.Any] = Field(default_factory=dict)
 
-    def to_asset_dep(self) -> AssetDep:
-        return AssetDep(AssetKey.from_user_string(self.key))
+    def to_asset_key(self) -> AssetKey:
+        """Convert to a Dagster AssetKey."""
+        return AssetKey.from_user_string(self.key)
 
 
-class SQLMeshDagsterTranslator:
+class SQLMeshDagsterTranslator(ConfigurableResource):
     """Translates SQLMesh objects for Dagster.
-    
-    This class provides methods to convert SQLMesh models and metadata into
-    Dagster-compatible formats. It can be subclassed to customize the translation
-    behavior, such as changing asset key generation or grouping logic.
-    
-    The translator is used throughout the dagster-sqlmesh integration, including
-    in the DagsterSQLMeshEventHandler and asset generation process.
+
+    Converts SQLMesh models and metadata into Dagster-compatible formats.
+    Can be subclassed to customize translation behavior such as asset key
+    generation or grouping logic.
+
+    Custom attributes must be declared as Pydantic fields (not set in __init__).
     """
 
     def get_asset_key(self, context: Context, fqn: str) -> AssetKey:
         """Get the Dagster AssetKey for a SQLMesh model.
-        
+
         Args:
-            context: The SQLMesh context (unused in default implementation)
+            context: The SQLMesh context
             fqn: Fully qualified name of the SQLMesh model
-            
+
         Returns:
-            AssetKey: The Dagster asset key for this model
+            The Dagster asset key for this model
         """
         path = self.get_asset_key_name(fqn)
         return AssetKey(path)
 
     def get_asset_key_name(self, fqn: str) -> Sequence[str]:
         """Parse a fully qualified name into asset key components.
-        
+
         Args:
-            fqn: Fully qualified name of the SQLMesh model (e.g., "catalog.schema.table")
-            
+            fqn: Fully qualified name (e.g., "catalog.schema.table")
+
         Returns:
-            Sequence[str]: Asset key components [catalog, schema, table]
+            Asset key components [catalog, schema, table]
         """
         table = exp.to_table(fqn)
         asset_key_name = [table.catalog, table.db, table.name]
@@ -84,58 +98,51 @@ class SQLMeshDagsterTranslator:
 
     def get_group_name(self, context: Context, model: Model) -> str:
         """Get the Dagster asset group name for a SQLMesh model.
-        
+
         Args:
-            context: The SQLMesh context (unused in default implementation)
+            context: The SQLMesh context
             model: The SQLMesh model
-            
+
         Returns:
-            str: The asset group name (defaults to the schema/database name)
+            The asset group name (defaults to the schema/database name)
         """
         path = self.get_asset_key_name(model.fqn)
         return path[-2]
 
     def get_context_dialect(self, context: Context) -> str:
         """Get the SQL dialect used by the SQLMesh context.
-        
+
         Args:
             context: The SQLMesh context
-            
+
         Returns:
-            str: The SQL dialect name (e.g., "duckdb", "postgres", etc.)
+            The SQL dialect name (e.g., "duckdb", "postgres")
         """
         return context.engine_adapter.dialect
 
-    def create_asset_dep(self, *, key: str, **kwargs: t.Any) -> ConvertibleToAssetDep:
-        """Create an object that resolves to an AssetDep.
+    def create_asset_dep(self, *, key: str) -> ConvertibleToAssetKey:
+        """Create an IntermediateAssetDep for an external dependency.
 
-        This creates an intermediate representation that can be converted to a
-        Dagster AssetDep. Most users will not need to use this method directly.
-        
         Args:
             key: The asset key string for the dependency
-            **kwargs: Additional arguments to pass to the AssetDep
-            
+
         Returns:
-            ConvertibleToAssetDep: An object that can be converted to an AssetDep
+            An object that can be converted to an AssetKey
         """
-        return IntermediateAssetDep(key=key, kwargs=kwargs)
+        return IntermediateAssetDep(key=key)
 
     def create_asset_out(
         self, *, model_key: str, asset_key: str, **kwargs: t.Any
     ) -> ConvertibleToAssetOut:
-        """Create an object that resolves to an AssetOut.
+        """Create an IntermediateAssetOut for a model.
 
-        This creates an intermediate representation that can be converted to a
-        Dagster AssetOut. Most users will not need to use this method directly.
-        
         Args:
             model_key: Internal key for the SQLMesh model
             asset_key: The asset key string for the output
-            **kwargs: Additional arguments including tags, group_name, kinds, etc.
-            
+            **kwargs: Additional arguments (tags, group_name, kinds, etc.)
+
         Returns:
-            ConvertibleToAssetOut: An object that can be converted to an AssetOut
+            An object that can be converted to an AssetOut
         """
         return IntermediateAssetOut(
             model_key=model_key,
@@ -149,39 +156,37 @@ class SQLMeshDagsterTranslator:
 
     def get_asset_key_str(self, fqn: str) -> str:
         """Get asset key string with sqlmesh prefix for internal mapping.
-        
-        This creates an internal identifier used to map outputs and dependencies
-        within the dagster-sqlmesh integration. It will not affect the actual
-        AssetKeys that users see. The result contains only alphanumeric characters
-        and underscores, making it safe for internal usage.
-        
+
+        Creates an internal identifier used to map outputs and dependencies
+        within the dagster-sqlmesh integration. Does not affect the actual
+        AssetKeys that users see. The result contains only alphanumeric
+        characters and underscores, making it safe for internal usage.
+
         Args:
             fqn: Fully qualified name of the SQLMesh model
-            
+
         Returns:
-            str: Internal asset key string with "sqlmesh__" prefix
+            Internal asset key string with "sqlmesh__" prefix
         """
         table = exp.to_table(fqn)
         asset_key_name = [table.catalog, table.db, table.name]
-        
+
         return "sqlmesh__" + "_".join(asset_key_name)
 
     def get_tags(self, context: Context, model: Model) -> dict[str, str]:
         """Get Dagster asset tags for a SQLMesh model.
-        
+
         Args:
-            context: The SQLMesh context (unused in default implementation)
+            context: The SQLMesh context
             model: The SQLMesh model
-            
+
         Returns:
-            dict[str, str]: Dictionary of tags to apply to the Dagster asset.
-                           Default implementation converts SQLMesh model tags to 
-                           empty string values, which causes the Dagster UI to
-                           render them as labels rather than key-value pairs.
-                           
-        Note:
-            Tags must contain only strings as keys and values. The Dagster UI
-            will render tags with empty string values as "labels" rather than
+            Dictionary of tags to apply to the Dagster asset. Default
+            converts SQLMesh model tags to empty string values, which
+            causes the Dagster UI to render them as labels rather than
             key-value pairs.
+
+        Note:
+            Tags must contain only strings as keys and values.
         """
         return {k: "" for k in model.tags}

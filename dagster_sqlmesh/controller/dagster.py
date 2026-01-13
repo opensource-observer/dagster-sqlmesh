@@ -7,7 +7,7 @@ from dagster_sqlmesh.controller.base import (
 )
 from dagster_sqlmesh.translator import SQLMeshDagsterTranslator
 from dagster_sqlmesh.types import (
-    ConvertibleToAssetDep,
+    ConvertibleToAssetKey,
     ConvertibleToAssetOut,
     SQLMeshModelDep,
     SQLMeshMultiAssetOptions,
@@ -24,11 +24,14 @@ class DagsterSQLMeshController(SQLMeshController[ContextCls]):
         environment: str,
         translator: SQLMeshDagsterTranslator,
     ) -> SQLMeshMultiAssetOptions:
-        """Loads all the asset outs of the current sqlmesh environment. If a
-        cache is provided, it will be tried first to load the asset outs."""
+        """Loads all the asset outs of the current sqlmesh environment.
+
+        If a cache is provided, it will be tried first to load the asset outs.
+        External dependencies use IntermediateAssetDep objects that convert to AssetKey.
+        """
 
         internal_asset_deps_map: dict[str, set[str]] = {}
-        deps_map: dict[str, ConvertibleToAssetDep] = {}
+        deps_map: dict[str, ConvertibleToAssetKey] = {}
         asset_outs: dict[str, ConvertibleToAssetOut] = {}
 
         with self.instance(environment, "to_asset_outs") as instance:
@@ -52,14 +55,15 @@ class DagsterSQLMeshController(SQLMeshController[ContextCls]):
 
                         internal_asset_deps.add(dep_asset_key_str)
                     else:
+                        # External dependency - create IntermediateAssetDep
                         table = translator.get_asset_key_str(dep.fqn)
-                        key = translator.get_asset_key(
-                            context, dep.fqn
-                        ).to_user_string()
-                        internal_asset_deps.add(key)
+                        key = translator.get_asset_key(context, dep.fqn)
+                        internal_asset_deps.add(key.to_user_string())
 
-                        # create an external dep
-                        deps_map[table] = translator.create_asset_dep(key=key)
+                        # Create lazy intermediate representation for caching
+                        deps_map[table] = translator.create_asset_dep(
+                            key=key.to_user_string()
+                        )
 
                 model_key = translator.get_asset_key_str(model.fqn)
                 asset_outs[model_key] = translator.create_asset_out(

@@ -32,7 +32,7 @@ class CustomSQLMeshContextConfig(SQLMeshContextConfig):
     custom_key: str
 
     def get_translator(self):
-        return RewrittenSQLMeshTranslator(self.custom_key)
+        return RewrittenSQLMeshTranslator(custom_key=self.custom_key)
 
 sqlmesh_config = CustomSQLMeshContextConfig(
     path=SQLMESH_PROJECT_PATH, 
@@ -45,10 +45,13 @@ class RewrittenSQLMeshTranslator(SQLMeshDagsterTranslator):
     sqlmesh project and only uses the table db and name
 
     We include this as a test of the translator functionality.
+    
+    Note: Since SQLMeshDagsterTranslator extends ConfigurableResource, custom
+    attributes must be declared as Pydantic fields (not set in __init__).
     """
 
-    def __init__(self, custom_key: str):
-        self.custom_key = custom_key
+    # Declare custom_key as a Pydantic field (ConfigurableResource is frozen)
+    custom_key: str
 
     def get_asset_key(self, context: Context, fqn: str) -> AssetKey:
         table = exp.to_table(fqn)  # Ensure fqn is a valid table expression
