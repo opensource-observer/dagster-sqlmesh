@@ -163,8 +163,8 @@ class SQLMeshDagsterTranslator:
         """
         table = exp.to_table(fqn)
         asset_key_name = [table.catalog, table.db, table.name]
-        
-        return "sqlmesh__" + "_".join(asset_key_name)
+
+        return ("sqlmesh__" + "_".join(asset_key_name)).replace("-", "_")
 
     def get_tags(self, context: Context, model: Model) -> dict[str, str]:
         """Get Dagster asset tags for a SQLMesh model.
