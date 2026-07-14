@@ -45,13 +45,19 @@ class DagsterSQLMeshController(SQLMeshController[ContextCls]):
                 asset_tags = translator.get_tags(context, model)
 
                 for dep in model_deps:
-                    if dep.model:
+                    if dep.model and not dep.model.kind.is_external:
                         dep_asset_key_str = translator.get_asset_key(
                             context, dep.model.fqn
                         ).to_user_string()
 
                         internal_asset_deps.add(dep_asset_key_str)
                     else:
+                        # A dependency that is NOT a materialised model of this project —
+                        # either an unmodelled table or an EXTERNAL model. Both are upstream
+                        # asset DEPS, not outputs. (External models resolve to a truthy
+                        # `dep.model`, so they must be routed here explicitly; otherwise they
+                        # would be added to internal_asset_deps without a matching out or dep,
+                        # which Dagster rejects once they are no longer emitted as outs.)
                         table = translator.get_asset_key_str(dep.fqn)
                         key = translator.get_asset_key(
                             context, dep.fqn
