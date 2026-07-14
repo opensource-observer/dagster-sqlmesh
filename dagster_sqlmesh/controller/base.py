@@ -367,7 +367,12 @@ class SQLMeshInstance(t.Generic[ContextCls]):
         for model_fqn, deps in dag.graph.items():
             logger.debug(f"model found: {model_fqn}")
             model = self.context.get_model(model_fqn)
-            if not model:
+            if not model or model.kind.is_external:
+                # External models are source tables the project READS, not models it
+                # materialises. They must never become multi-asset outputs (that produces
+                # a phantom asset and collides with any existing asset — e.g. a dlt asset —
+                # that already owns that key). They still surface as dependency edges via
+                # to_asset_outs' dep handling.
                 continue
             yield (model, deps)
 
