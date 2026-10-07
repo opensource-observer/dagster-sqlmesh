@@ -671,7 +671,7 @@ class SQLMeshResource(dg.ConfigurableResource):
                     plan_options=plan_options,
                     run_options=run_options,
                 ):
-                    logger.debug(f"sqlmesh event: {event}")
+                    logger.debug("sqlmesh event: %s", event)
                     event_handler.process_events(event)
             except SQLMeshError as e:
                 logger.error(f"sqlmesh error: {e}")
